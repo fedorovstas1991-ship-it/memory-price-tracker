@@ -127,6 +127,12 @@ body{
 }
 .source-name{font-size:12px;color:var(--text3)}
 .source-price{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600}
+.source-link{
+  font-size:11px;color:var(--accent);text-decoration:none;
+  padding:4px 10px;border:1px solid var(--accent);border-radius:var(--radius-xs);
+  font-weight:600;transition:all 0.15s ease;
+}
+.source-link:active{transform:scale(0.95);background:var(--accent-muted)}
 
 .empty{text-align:center;padding:48px 16px;color:var(--text3);font-size:13px;line-height:1.5}
 </style>
@@ -237,7 +243,8 @@ function renderCards(){
   container.innerHTML=entries.map(([chip,data],i)=>{
     const p=data.best;
     const usd=(+p['Price USD']).toFixed(2);
-    const rub=p['Price RUB']?(+p['Price RUB']).toFixed(0):'--';
+    const rubRaw=p['Price RUB']?p['Price RUB'].toString().replace(',','.'):''
+    const rub=rubRaw?(+rubRaw).toFixed(0):'--';
     const d=getDelta(chip);
     let dH='';
     if(d!==null){
@@ -261,7 +268,10 @@ function openModal(chip){
 
   document.getElementById('sourcePrices').innerHTML=data.sources
     .sort((a,b)=>(+a['Price USD'])-(+b['Price USD']))
-    .map(s=>`<div class="source-row"><span class="source-name">${s['Source']}</span><span class="source-price">$${(+s['Price USD']).toFixed(2)}</span></div>`).join('');
+    .map(s=>{
+      const link=s['Link']?`<a class="source-link" href="${s['Link']}" target="_blank" onclick="event.stopPropagation()">Open</a>`:'';
+      return`<div class="source-row"><span class="source-name">${s['Source']}</span><span class="source-price">$${(+s['Price USD']).toFixed(2)}</span>${link}</div>`;
+    }).join('');
 
   const entries=historyData.filter(h=>h['Part Number']===chip&&h['Price USD'])
     .sort((a,b)=>(a['Date']||'').localeCompare(b['Date']||''));
