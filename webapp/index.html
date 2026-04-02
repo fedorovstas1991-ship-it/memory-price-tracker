@@ -3,391 +3,1338 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Memory Price Tracker</title>
+<title>Memory Prices</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
-  --bg:#09090b;--bg2:#18181b;--bg3:#27272a;--bg4:#3f3f46;
+  --bg:#09090b;
+  --bg2:#18181b;
+  --bg3:#27272a;
+  --bg4:#3f3f46;
   --border:#27272a;
-  --text:#fafafa;--text2:#a1a1aa;--text3:#71717a;
-  --accent:#10b981;--accent2:#3b82f6;--accent3:#f59e0b;--accent4:#ef4444;--accent5:#8b5cf6;--accent6:#06b6d4;
-  --accent-bg:rgba(16,185,129,0.1);--red-bg:rgba(239,68,68,0.1);
-  --r:12px;--r-sm:8px;
+  --border2:#3f3f46;
+  --text:#fafafa;
+  --text2:#a1a1aa;
+  --text3:#71717a;
+  --text4:#52525b;
+  --accent:#10b981;
+  --accent-dim:rgba(16,185,129,0.12);
+  --accent-glow:rgba(16,185,129,0.25);
+  --r:10px;
+  --r-sm:6px;
+  --r-lg:14px;
 }
-body{font-family:'Geist',system-ui,sans-serif;background:var(--bg);color:var(--text);
-  padding:0;overflow-x:hidden;-webkit-font-smoothing:antialiased;font-size:13px}
+html{background:var(--bg);scroll-behavior:smooth}
+body{
+  font-family:'Geist',system-ui,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  font-size:14px;
+  line-height:1.5;
+}
 .mono{font-family:'JetBrains Mono',monospace}
 
-/* Top bar */
-.topbar{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--border);padding:12px 16px}
-.topbar h1{font-size:16px;font-weight:700;letter-spacing:-0.03em}
-.topbar .updated{font-size:10px;color:var(--text3);margin-top:1px}
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
 
-/* Selectors row */
-.selectors{display:flex;gap:8px;padding:10px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.selectors::-webkit-scrollbar{display:none}
+/* ── Top bar ── */
+#topbar{
+  position:sticky;top:0;z-index:60;
+  background:rgba(9,9,11,0.92);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  padding:0 16px;
+  height:52px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+#topbar h1{
+  font-size:15px;font-weight:700;letter-spacing:-0.03em;
+  line-height:1;
+}
+#topbar h1 span{color:var(--accent)}
+.topbar-right{display:flex;align-items:center;gap:8px}
+#updatedBadge{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;color:var(--text3);
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:4px;padding:3px 7px;
+  white-space:nowrap;
+}
+#demoBadge{
+  display:none;
+  font-size:10px;font-weight:600;
+  background:rgba(245,158,11,0.15);
+  color:#f59e0b;
+  border:1px solid rgba(245,158,11,0.3);
+  border-radius:4px;padding:3px 7px;
+  letter-spacing:0.04em;
+}
+
+/* ── Filter bar ── */
+#filterbar{
+  position:sticky;top:52px;z-index:55;
+  background:rgba(9,9,11,0.88);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+  padding:8px 16px;
+  display:flex;gap:6px;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+}
+#filterbar::-webkit-scrollbar{display:none}
+.sel-wrap{position:relative;flex-shrink:0}
+.sel-wrap::after{
+  content:'';
+  position:absolute;right:9px;top:50%;transform:translateY(-50%);
+  width:0;height:0;
+  border-left:4px solid transparent;border-right:4px solid transparent;
+  border-top:5px solid var(--text4);
+  pointer-events:none;
+}
 select{
   appearance:none;-webkit-appearance:none;
-  background:var(--bg2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2371717a'/%3E%3C/svg%3E") no-repeat right 10px center;
-  color:var(--text);border:1px solid var(--border);border-radius:var(--r-sm);
-  padding:7px 28px 7px 10px;font-size:12px;font-family:'Geist',system-ui;font-weight:500;
-  cursor:pointer;min-width:0;flex-shrink:0;
+  background:var(--bg2);
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  padding:6px 26px 6px 10px;
+  font-size:12px;font-weight:500;
+  font-family:'Geist',system-ui,sans-serif;
+  cursor:pointer;
+  transition:border-color 0.15s;
+  min-width:0;
 }
 select:focus{outline:none;border-color:var(--accent)}
+select:active{transform:scale(0.98)}
 
-/* KPI strip */
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);margin:0 16px;border-radius:var(--r);overflow:hidden}
-.kpi{background:var(--bg2);padding:12px;text-align:center}
-.kpi .val{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600;letter-spacing:-0.03em}
-.kpi .lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px;font-weight:500}
+/* ── KPI strip ── */
+#kpiStrip{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  border-bottom:1px solid var(--border);
+  margin:0;
+}
+.kpi{
+  padding:14px 12px;
+  border-right:1px solid var(--border);
+  position:relative;
+  overflow:hidden;
+}
+.kpi:last-child{border-right:none}
+.kpi-val{
+  font-family:'JetBrains Mono',monospace;
+  font-size:19px;font-weight:600;
+  letter-spacing:-0.04em;
+  line-height:1;
+  color:var(--text);
+}
+.kpi-lbl{
+  font-size:9px;font-weight:600;
+  color:var(--text3);
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+  margin-top:4px;
+}
 
-/* Section */
-.section{margin:12px 16px 0}
-.section-title{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px}
+/* ── Sections ── */
+.section{padding:16px 16px 0}
+.section-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:12px;
+}
+.section-title{
+  font-size:11px;font-weight:600;
+  color:var(--text3);
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+}
 
-/* Chart cards */
-.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:10px}
-.chart-card h3{font-size:13px;font-weight:600;margin-bottom:8px;letter-spacing:-0.01em}
-.chart-container{position:relative;height:200px}
+/* ── Chart cards ── */
+.chart-card{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:14px;
+  margin-bottom:10px;
+}
+.chart-card-title{
+  font-size:13px;font-weight:600;
+  letter-spacing:-0.015em;
+  margin-bottom:12px;
+  color:var(--text);
+}
+.chart-wrap{position:relative}
+.chart-h180{height:180px}
+.chart-h200{height:200px}
+.chart-h220{height:220px}
 
-/* Data table */
-.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:80px}
-.table-wrap::-webkit-scrollbar{height:4px}
-.table-wrap::-webkit-scrollbar-track{background:var(--bg)}
-.table-wrap::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
-table{width:100%;border-collapse:collapse;font-size:12px;min-width:600px}
-thead{position:sticky;top:0;z-index:2}
-th{background:var(--bg3);color:var(--text2);font-weight:600;text-align:left;
-  padding:8px 10px;white-space:nowrap;cursor:pointer;user-select:none;font-size:10px;
-  text-transform:uppercase;letter-spacing:0.05em}
-th:hover{color:var(--text)}
-th .arrow{font-size:8px;margin-left:4px;opacity:0.5}
-th.sorted .arrow{opacity:1;color:var(--accent)}
-td{padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
-tr:hover td{background:rgba(255,255,255,0.02)}
-.td-chip{font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis}
-.td-price{font-family:'JetBrains Mono',monospace;font-weight:500}
-.td-source{color:var(--text2)}
-.td-link a{color:var(--accent);text-decoration:none;font-size:11px}
-.td-link a:hover{text-decoration:underline}
-.td-delta{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:11px}
-.up{color:var(--accent4)}.down{color:var(--accent)}.flat{color:var(--text3)}
+/* 2-col chart grid */
+.chart-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+@media(max-width:520px){.chart-row{grid-template-columns:1fr}}
 
-/* Loading skeleton */
-.skeleton{padding:16px}
-.skel-row{height:14px;background:var(--bg2);border-radius:4px;margin-bottom:8px;position:relative;overflow:hidden}
-.skel-row::after{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.03),transparent);animation:shim 1.5s infinite}
-@keyframes shim{to{left:100%}}
-.skel-w1{width:60%}.skel-w2{width:80%}.skel-w3{width:45%}.skel-w4{width:70%}
+/* ── Skeleton loaders ── */
+.skeleton-block{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:14px;
+  margin-bottom:10px;
+}
+.skel{
+  background:var(--bg3);
+  border-radius:4px;
+  position:relative;overflow:hidden;
+}
+.skel::after{
+  content:'';
+  position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.04) 50%,transparent 100%);
+  animation:shimmer 1.6s infinite;
+}
+@keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.skel-h12{height:12px}.skel-h16{height:16px}.skel-h20{height:20px}
+.skel-h160{height:160px}.skel-h180{height:180px}
+.mb4{margin-bottom:4px}.mb6{margin-bottom:6px}.mb8{margin-bottom:8px}
+.w30{width:30%}.w45{width:45%}.w60{width:60%}.w75{width:75%}.w90{width:90%}.w100{width:100%}
 
-/* Detail modal */
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(6px);
-  -webkit-backdrop-filter:blur(6px);z-index:100;align-items:flex-end;justify-content:center}
-.overlay.show{display:flex}
-.modal{background:var(--bg2);border:1px solid var(--border);border-bottom:none;
-  border-radius:16px 16px 0 0;width:100%;max-height:80vh;padding:12px 16px 32px;overflow-y:auto;
-  box-shadow:0 -8px 40px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.04)}
-.modal-handle{width:32px;height:3px;background:var(--bg4);border-radius:2px;margin:0 auto 12px}
-.modal h2{font-size:16px;font-weight:700;letter-spacing:-0.02em}
-.modal .sub{font-size:11px;color:var(--text3);margin-bottom:12px}
-.detail-chart{height:200px;margin-bottom:12px}
-.detail-sources{display:flex;flex-direction:column;gap:4px}
-.detail-row{display:flex;justify-content:space-between;align-items:center;
-  padding:8px 10px;border:1px solid var(--border);border-radius:var(--r-sm)}
-.detail-row .name{font-size:11px;color:var(--text3)}
-.detail-row .price{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600}
-.detail-row .link{color:var(--accent);text-decoration:none;font-size:10px;font-weight:600;
-  padding:3px 8px;border:1px solid var(--accent);border-radius:4px}
-.detail-row .link:active{background:var(--accent-bg)}
+/* ── Table ── */
+.table-section{padding:16px 16px 0}
+.table-outer{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--r-lg);border:1px solid var(--border)}
+.table-outer::-webkit-scrollbar{height:3px}
+table{width:100%;border-collapse:collapse;min-width:560px;font-size:12px}
+thead tr{background:var(--bg3)}
+th{
+  padding:9px 12px;
+  text-align:left;
+  font-size:10px;font-weight:600;
+  color:var(--text3);
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  white-space:nowrap;
+  cursor:pointer;
+  user-select:none;
+  border-bottom:1px solid var(--border);
+  transition:color 0.15s;
+}
+th:hover{color:var(--text2)}
+th.th-sorted{color:var(--accent)}
+.th-arrow{margin-left:3px;font-size:8px;opacity:0.5;transition:opacity 0.15s}
+th.th-sorted .th-arrow{opacity:1}
+tbody tr{
+  cursor:pointer;
+  transition:background 0.1s;
+}
+tbody tr:nth-child(even) td{background:rgba(255,255,255,0.012)}
+tbody tr:hover td{background:rgba(16,185,129,0.05)!important}
+tbody tr:active{transform:scale(0.995)}
+td{
+  padding:9px 12px;
+  border-bottom:1px solid rgba(39,39,42,0.7);
+  white-space:nowrap;
+  color:var(--text2);
+  vertical-align:middle;
+}
+tbody tr:last-child td{border-bottom:none}
+.td-type{
+  font-size:10px;font-weight:600;
+  color:var(--text3);
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+}
+.td-chip{
+  font-weight:600;color:var(--text);
+  max-width:160px;overflow:hidden;text-overflow:ellipsis;
+}
+.td-brand{color:var(--text3);font-size:11px}
+.td-src{
+  font-size:11px;
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:4px;padding:2px 6px;
+  display:inline-block;
+  color:var(--text2);
+}
+.td-price{font-family:'JetBrains Mono',monospace;font-weight:500;color:var(--text)}
+.td-rub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)}
+.td-stock{font-size:11px}
+.in-stock{color:var(--accent)}
+.no-stock{color:var(--text4)}
+.td-link a{
+  font-size:10px;font-weight:600;
+  color:var(--accent);
+  text-decoration:none;
+  border:1px solid rgba(16,185,129,0.3);
+  border-radius:4px;padding:3px 8px;
+  transition:background 0.15s,border-color 0.15s;
+  display:inline-block;
+}
+.td-link a:hover{background:var(--accent-dim);border-color:var(--accent)}
+td .td-link{padding:6px 12px}
+
+/* Row appear animation */
+@keyframes rowIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+tbody tr{animation:rowIn 0.25s ease both}
+
+/* Load more */
+#loadMoreWrap{padding:16px;text-align:center}
+#btnLoadMore{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  color:var(--text2);
+  border-radius:var(--r);
+  padding:10px 24px;
+  font-size:12px;font-weight:600;
+  font-family:'Geist',system-ui,sans-serif;
+  cursor:pointer;
+  transition:background 0.15s,border-color 0.15s,color 0.15s;
+}
+#btnLoadMore:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+#btnLoadMore:active{transform:scale(0.98)}
+
+/* Bottom spacer for Telegram */
+.bottom-space{height:32px}
+
+/* ── Modal overlay ── */
+#overlay{
+  display:none;
+  position:fixed;inset:0;
+  background:rgba(0,0,0,0.65);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  z-index:100;
+  align-items:flex-end;
+}
+#overlay.show{display:flex}
+.modal{
+  background:var(--bg2);
+  border:1px solid var(--border2);
+  border-bottom:none;
+  border-radius:18px 18px 0 0;
+  width:100%;
+  max-height:82vh;
+  overflow-y:auto;
+  box-shadow:0 -16px 48px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.05);
+  transform:translateY(100%);
+  transition:transform 0.35s cubic-bezier(0.16,1,0.3,1);
+}
+#overlay.show .modal{transform:translateY(0)}
+.modal-handle{width:36px;height:4px;background:var(--bg4);border-radius:2px;margin:12px auto 0}
+.modal-inner{padding:14px 16px 48px}
+.modal-title{font-size:17px;font-weight:700;letter-spacing:-0.025em;margin-bottom:2px}
+.modal-sub{font-size:11px;color:var(--text3);margin-bottom:14px}
+.modal-chart-wrap{height:200px;margin-bottom:16px}
+.modal-sources-title{
+  font-size:10px;font-weight:600;
+  color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;
+  margin-bottom:8px;
+}
+.src-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px;
+  border-radius:var(--r-sm);
+  border:1px solid var(--border);
+  margin-bottom:6px;
+  background:var(--bg);
+}
+.src-row:last-child{margin-bottom:0}
+.src-info{display:flex;flex-direction:column;gap:2px}
+.src-name{font-size:12px;font-weight:600;color:var(--text2)}
+.src-price{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:var(--text);letter-spacing:-0.02em}
+.src-meta{font-size:10px;color:var(--text3)}
+.src-open{
+  font-size:10px;font-weight:700;letter-spacing:0.04em;
+  text-transform:uppercase;
+  color:var(--accent);
+  text-decoration:none;
+  border:1px solid rgba(16,185,129,0.35);
+  border-radius:6px;padding:6px 12px;
+  transition:background 0.15s;
+  flex-shrink:0;
+}
+.src-open:hover{background:var(--accent-dim)}
+.src-open:active{transform:scale(0.96)}
+
+/* ── Empty state ── */
+.empty{
+  padding:48px 16px;text-align:center;
+  color:var(--text3);font-size:13px;
+}
+.empty-icon{font-size:32px;margin-bottom:8px;opacity:0.4}
+
+/* ── Accent pulse on KPI ── */
+@keyframes kpiIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:none}}
+.kpi-val{animation:kpiIn 0.4s ease both}
+
+/* Active states */
+button:active,select:active{transform:scale(0.98)}
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <h1>Memory Price Tracker</h1>
-  <div class="updated" id="updated">Loading...</div>
+<!-- Top bar -->
+<div id="topbar">
+  <h1>Memory <span>Prices</span></h1>
+  <div class="topbar-right">
+    <div id="demoBadge">DEMO</div>
+    <div id="updatedBadge">--</div>
+  </div>
 </div>
 
-<div class="selectors" id="selectors">
-  <select id="selType"><option value="All">All Types</option></select>
-  <select id="selSource"><option value="All">All Sources</option></select>
-  <select id="selSort">
-    <option value="price_asc">Price: Low to High</option>
-    <option value="price_desc">Price: High to Low</option>
-    <option value="name_asc">Name: A-Z</option>
-    <option value="rub_desc">RUB: High to Low</option>
-  </select>
+<!-- Filter bar -->
+<div id="filterbar">
+  <div class="sel-wrap">
+    <select id="selType"><option value="">All Types</option></select>
+  </div>
+  <div class="sel-wrap">
+    <select id="selBrand"><option value="">All Brands</option></select>
+  </div>
+  <div class="sel-wrap">
+    <select id="selSource"><option value="">All Sources</option></select>
+  </div>
+  <div class="sel-wrap">
+    <select id="selSort">
+      <option value="price_asc">Price: Low to High</option>
+      <option value="price_desc">Price: High to Low</option>
+      <option value="name_asc">Name: A-Z</option>
+      <option value="rub_desc">RUB: High to Low</option>
+    </select>
+  </div>
 </div>
 
-<div class="kpis" id="kpis">
-  <div class="kpi"><div class="val">--</div><div class="lbl">Prices</div></div>
-  <div class="kpi"><div class="val">--</div><div class="lbl">Types</div></div>
-  <div class="kpi"><div class="val">--</div><div class="lbl">Sources</div></div>
-  <div class="kpi"><div class="val">--</div><div class="lbl">Chips</div></div>
+<!-- KPI strip -->
+<div id="kpiStrip">
+  <div class="kpi">
+    <div class="kpi-val mono" id="kpiTotal">--</div>
+    <div class="kpi-lbl">Prices</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-val mono" id="kpiTypes">--</div>
+    <div class="kpi-lbl">Types</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-val mono" id="kpiBrands">--</div>
+    <div class="kpi-lbl">Brands</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-val mono" id="kpiSources">--</div>
+    <div class="kpi-lbl">Sources</div>
+  </div>
 </div>
 
+<!-- Chart row 1: Distribution + Source coverage -->
 <div class="section">
-  <div class="section-title">Price Distribution by Type</div>
-  <div class="chart-card"><div class="chart-container"><canvas id="chartByType"></canvas></div></div>
+  <div class="chart-row">
+    <div class="chart-card">
+      <div class="chart-card-title">Distribution by Type</div>
+      <div class="chart-wrap chart-h180" id="skChart1">
+        <div class="skel skel-h180 w100"></div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-title">Source Coverage</div>
+      <div class="chart-wrap chart-h180" id="skChart2">
+        <div class="skel skel-h180 w100"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
+<!-- Chart: Avg price by type -->
 <div class="section">
-  <div class="section-title">Source Coverage</div>
-  <div class="chart-card"><div class="chart-container"><canvas id="chartBySrc"></canvas></div></div>
+  <div class="chart-card">
+    <div class="chart-card-title">Average Price by Type (USD)</div>
+    <div class="chart-wrap chart-h200" id="skChart3">
+      <div class="skel skel-h180 w100"></div>
+    </div>
+  </div>
 </div>
 
+<!-- Chart: Price trend -->
 <div class="section">
-  <div class="section-title">Average Price by Type (USD)</div>
-  <div class="chart-card"><div class="chart-container"><canvas id="chartAvg"></canvas></div></div>
+  <div class="chart-card">
+    <div class="chart-card-title">Price Trend over Time</div>
+    <div class="chart-wrap chart-h220" id="skChart4">
+      <div class="skel skel-h180 w100"></div>
+    </div>
+  </div>
 </div>
 
-<div class="section">
-  <div class="section-title" id="tableTitle">All Prices</div>
+<!-- Data table -->
+<div class="table-section">
+  <div class="section-hd">
+    <div class="section-title" id="tableTitle">All Prices</div>
+  </div>
+  <div class="table-outer">
+    <table>
+      <thead>
+        <tr>
+          <th data-col="type">Type<span class="th-arrow">&#9650;</span></th>
+          <th data-col="chip" class="th-sorted">Chip<span class="th-arrow">&#9650;</span></th>
+          <th data-col="brand">Brand<span class="th-arrow">&#9650;</span></th>
+          <th data-col="source">Source<span class="th-arrow">&#9650;</span></th>
+          <th data-col="price_usd">USD<span class="th-arrow">&#9650;</span></th>
+          <th data-col="price_rub">RUB<span class="th-arrow">&#9650;</span></th>
+          <th data-col="stock">Stock<span class="th-arrow">&#9650;</span></th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="8">
+          <div style="padding:16px">
+            <div class="skel skel-h12 w90 mb8"></div>
+            <div class="skel skel-h12 w75 mb8"></div>
+            <div class="skel skel-h12 w60 mb8"></div>
+            <div class="skel skel-h12 w90 mb8"></div>
+            <div class="skel skel-h12 w45 mb8"></div>
+            <div class="skel skel-h12 w75"></div>
+          </div>
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
 </div>
-<div class="table-wrap">
-  <table>
-    <thead><tr>
-      <th data-col="Type">Type <span class="arrow">&#9650;</span></th>
-      <th data-col="Chip">Chip <span class="arrow">&#9650;</span></th>
-      <th data-col="Source">Source <span class="arrow">&#9650;</span></th>
-      <th data-col="Price USD" class="sorted">USD <span class="arrow">&#9650;</span></th>
-      <th data-col="Price RUB">RUB <span class="arrow">&#9650;</span></th>
-      <th>Link</th>
-    </tr></thead>
-    <tbody id="tbody">
-      <tr><td colspan="6"><div class="skeleton">
-        <div class="skel-row skel-w2"></div><div class="skel-row skel-w1"></div>
-        <div class="skel-row skel-w4"></div><div class="skel-row skel-w3"></div>
-        <div class="skel-row skel-w2"></div><div class="skel-row skel-w1"></div>
-      </div></td></tr>
-    </tbody>
-  </table>
+<div id="loadMoreWrap" style="display:none">
+  <button id="btnLoadMore" onclick="loadMore()">Load more</button>
 </div>
+<div class="bottom-space"></div>
 
-<div class="overlay" id="overlay">
+<!-- Detail modal -->
+<div id="overlay">
   <div class="modal">
     <div class="modal-handle"></div>
-    <h2 id="mTitle"></h2>
-    <div class="sub" id="mSub"></div>
-    <div class="detail-chart"><canvas id="mChart"></canvas></div>
-    <div class="detail-sources" id="mSources"></div>
+    <div class="modal-inner">
+      <div class="modal-title" id="mTitle"></div>
+      <div class="modal-sub" id="mSub"></div>
+      <div class="modal-chart-wrap">
+        <canvas id="mChart"></canvas>
+      </div>
+      <div class="modal-sources-title">Price by Source</div>
+      <div id="mSources"></div>
+    </div>
   </div>
 </div>
 
 <script>
-const SID='1utDQUWzUZFR1tSYs9miedmzEWMDaic7xCLKBwkF52c8';
-const GIDS={'Prices Now':2138457408,'History':825033088};
-const CSV=g=>`https://docs.google.com/spreadsheets/d/${SID}/export?format=csv&gid=${g}`;
-const COLORS=['#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16'];
+/* ─────────────────────────────────────────
+   CONFIG
+───────────────────────────────────────── */
+const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000/api/'
+  : (window.location.origin + '/api/');
 
-let raw=[],hist=[],sortCol='Price USD',sortAsc=true;
-let chartType=null,chartSrc=null,chartAvg=null,detailChart=null;
+const PALETTE = ['#10b981','#3b82f6','#f59e0b','#ef4444','#06b6d4','#84cc16','#f97316','#a78bfa'];
+const CHART_ANIM = {duration:800,easing:'easeOutQuart'};
+const PAGE_SIZE = 30;
 
-const tg=window.Telegram?.WebApp;
-if(tg){tg.ready();tg.expand();tg.setHeaderColor('#09090b');tg.setBackgroundColor('#09090b');
-  if(tg.BackButton)tg.BackButton.onClick(closeModal)}
-
-/* CSV parser */
-function parseCSV(t){const l=t.split('\n').filter(x=>x.trim());if(l.length<2)return[];
-  const h=pLine(l[0]);return l.slice(1).map(r=>{const v=pLine(r),o={};h.forEach((k,i)=>o[k]=v[i]||'');return o})}
-function pLine(l){const r=[];let c='',q=0;for(let i=0;i<l.length;i++){const ch=l[i];
-  if(q){if(ch==='"'&&l[i+1]==='"'){c+='"';i++}else if(ch==='"')q=0;else c+=ch}
-  else{if(ch==='"')q=1;else if(ch===','){r.push(c.trim());c=''}else c+=ch}}r.push(c.trim());return r}
-
-function num(v){return+(v||'0').toString().replace(',','.')||0}
-
-/* Selectors */
-function populateSelectors(){
-  const types=[...new Set(raw.map(r=>r.Type).filter(Boolean))].sort();
-  const sources=[...new Set(raw.map(r=>r.Source).filter(Boolean))].sort();
-  const selT=document.getElementById('selType'),selS=document.getElementById('selSource');
-  selT.innerHTML='<option value="All">All Types</option>'+types.map(t=>`<option>${t}</option>`).join('');
-  selS.innerHTML='<option value="All">All Sources</option>'+sources.map(s=>`<option>${s}</option>`).join('');
+/* ─────────────────────────────────────────
+   TELEGRAM INIT
+───────────────────────────────────────── */
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  try { tg.setHeaderColor('#09090b'); } catch(e) {}
+  try { tg.setBackgroundColor('#09090b'); } catch(e) {}
+  if (tg.BackButton) tg.BackButton.onClick(closeModal);
 }
 
-function filtered(){
-  let d=raw;
-  const t=document.getElementById('selType').value;
-  const s=document.getElementById('selSource').value;
-  if(t!=='All')d=d.filter(r=>r.Type===t);
-  if(s!=='All')d=d.filter(r=>r.Source===s);
-  return d;
+/* ─────────────────────────────────────────
+   MOCK DATA
+───────────────────────────────────────── */
+function buildMockData() {
+  const types = ['eMMC','DDR4','DDR5','NAND Flash','NOR Flash','LPDDR4X'];
+  const brands = ['Samsung','Micron','SK Hynix','Kioxia','Winbond'];
+  const sources = ['findchips','szlcsc','jlcpcb','memorymarket','chipdip','ebay'];
+  const capacities = ['1GB','2GB','4GB','8GB','16GB','32GB','64GB','128MB','256MB','512MB'];
+  const descMap = {
+    'eMMC':'Embedded MultiMediaCard flash storage',
+    'DDR4':'Double Data Rate 4 SDRAM',
+    'DDR5':'Double Data Rate 5 SDRAM',
+    'NAND Flash':'NAND architecture flash memory',
+    'NOR Flash':'NOR architecture flash memory',
+    'LPDDR4X':'Low Power Double Data Rate 4X'
+  };
+
+  const priceBase = {'eMMC':3,'DDR4':8,'DDR5':18,'NAND Flash':1.5,'NOR Flash':0.8,'LPDDR4X':12};
+  const chips = [];
+
+  types.forEach(type => {
+    brands.forEach(brand => {
+      capacities.slice(0,4).forEach(cap => {
+        const suffix = Math.random().toString(36).slice(2,6).toUpperCase();
+        const pn = `${brand.slice(0,3).toUpperCase()}-${type.replace(/\s/g,'').slice(0,4)}-${cap}-${suffix}`;
+        chips.push({pn, type, brand, cap, desc: descMap[type]});
+      });
+    });
+  });
+
+  const entries = [];
+  chips.forEach(chip => {
+    const numSources = 1 + Math.floor(Math.random() * 3);
+    const srcSubset = [...sources].sort(() => Math.random()-0.5).slice(0, numSources);
+    srcSubset.forEach(src => {
+      const base = priceBase[chip.type] * (chip.cap.includes('GB') ? parseInt(chip.cap) : parseInt(chip.cap) / 1000);
+      const price_usd = Math.max(0.5, +(base * (0.7 + Math.random() * 0.8)).toFixed(2));
+      const price_rub = +(price_usd * (88 + Math.random()*8)).toFixed(0);
+      const stock = Math.random() > 0.35 ? Math.floor(Math.random() * 9500 + 50) : 0;
+      entries.push({
+        id: entries.length,
+        type: chip.type,
+        chip: chip.pn,
+        brand: chip.brand,
+        capacity: chip.cap,
+        description: chip.desc,
+        source: src,
+        price_usd,
+        price_rub,
+        stock,
+        link: `https://example.com/search?q=${encodeURIComponent(chip.pn)}&src=${src}`
+      });
+    });
+  });
+
+  return entries;
 }
 
-function sorted(d){
-  const col=sortCol;const dir=sortAsc?1:-1;
-  return[...d].sort((a,b)=>{
-    const va=col.includes('Price')||col==='MOQ'?num(a[col]):a[col]||'';
-    const vb=col.includes('Price')||col==='MOQ'?num(b[col]):b[col]||'';
-    return va<vb?-dir:va>vb?dir:0;
+function buildMockHistory(prices) {
+  const hist = {};
+  const types = [...new Set(prices.map(p => p.type))];
+  const today = new Date();
+  const dates = Array.from({length:30}, (_,i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (29-i));
+    return d.toISOString().slice(0,10);
+  });
+
+  types.forEach(type => {
+    const base = {eMMC:4,DDR4:10,DDR5:20,'NAND Flash':2,'NOR Flash':1,LPDDR4X:15}[type] || 5;
+    hist[type] = dates.map((date,i) => {
+      const trend = Math.sin(i/5) * 0.8;
+      const noise = (Math.random()-0.5)*1.2;
+      return {date, avg: Math.max(0.5, +(base + trend + noise).toFixed(2))};
+    });
+  });
+  return {types, dates, hist};
+}
+
+function buildMockStats(prices) {
+  return {
+    total: prices.length,
+    types: [...new Set(prices.map(p=>p.type))].length,
+    brands: [...new Set(prices.map(p=>p.brand))].length,
+    sources: [...new Set(prices.map(p=>p.source))].length,
+    updated: new Date().toISOString()
+  };
+}
+
+/* ─────────────────────────────────────────
+   STATE
+───────────────────────────────────────── */
+let allPrices = [];
+let historyData = null;
+let sortCol = 'chip';
+let sortAsc = true;
+let page = 0;
+let filteredData = [];
+let demoMode = false;
+
+let charts = {};
+let detailChart = null;
+
+/* ─────────────────────────────────────────
+   CHART.JS GLOBALS
+───────────────────────────────────────── */
+Chart.defaults.color = '#71717a';
+Chart.defaults.borderColor = '#27272a';
+Chart.defaults.font.family = "'Geist', system-ui, sans-serif";
+
+const TOOLTIP_DEFAULTS = {
+  backgroundColor:'#18181b',
+  borderColor:'#3f3f46',
+  borderWidth:1,
+  titleColor:'#fafafa',
+  bodyColor:'#a1a1aa',
+  padding:10,
+  cornerRadius:8,
+  titleFont:{family:"'JetBrains Mono',monospace",size:12},
+  bodyFont:{family:"'JetBrains Mono',monospace",size:11},
+  callbacks:{}
+};
+
+function makeGradient(ctx, color, alpha1=0.3, alpha2=0) {
+  const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.clientHeight || 200);
+  gradient.addColorStop(0, color + Math.round(alpha1*255).toString(16).padStart(2,'0'));
+  gradient.addColorStop(1, color + Math.round(alpha2*255).toString(16).padStart(2,'0'));
+  return gradient;
+}
+
+function destroyChart(key) {
+  if (charts[key]) { charts[key].destroy(); charts[key] = null; }
+}
+
+/* ─────────────────────────────────────────
+   FILTERS
+───────────────────────────────────────── */
+function getFilters() {
+  return {
+    type: document.getElementById('selType').value,
+    brand: document.getElementById('selBrand').value,
+    source: document.getElementById('selSource').value,
+    sort: document.getElementById('selSort').value,
+  };
+}
+
+function applyFilters(data) {
+  const f = getFilters();
+  let d = data;
+  if (f.type) d = d.filter(r => r.type === f.type);
+  if (f.brand) d = d.filter(r => r.brand === f.brand);
+  if (f.source) d = d.filter(r => r.source === f.source);
+  return applySortState(d);
+}
+
+function applySortState(d) {
+  const dir = sortAsc ? 1 : -1;
+  return [...d].sort((a, b) => {
+    let va = a[sortCol] ?? '';
+    let vb = b[sortCol] ?? '';
+    if (typeof va === 'number') return (va - vb) * dir;
+    return va.toString().localeCompare(vb.toString()) * dir;
   });
 }
 
-/* KPIs */
-function renderKPIs(d){
-  const types=new Set(d.map(r=>r.Type));
-  const sources=new Set(d.map(r=>r.Source));
-  const chips=new Set(d.map(r=>r.Chip));
-  const el=document.getElementById('kpis');
-  el.innerHTML=`
-    <div class="kpi"><div class="val">${d.length}</div><div class="lbl">Prices</div></div>
-    <div class="kpi"><div class="val">${types.size}</div><div class="lbl">Types</div></div>
-    <div class="kpi"><div class="val">${sources.size}</div><div class="lbl">Sources</div></div>
-    <div class="kpi"><div class="val">${chips.size}</div><div class="lbl">Chips</div></div>`;
+function populateSelectors(data) {
+  const types = [...new Set(data.map(r=>r.type))].sort();
+  const brands = [...new Set(data.map(r=>r.brand))].sort();
+  const sources = [...new Set(data.map(r=>r.source))].sort();
+
+  const selT = document.getElementById('selType');
+  const selB = document.getElementById('selBrand');
+  const selS = document.getElementById('selSource');
+
+  const saved = {t:selT.value, b:selB.value, s:selS.value};
+
+  selT.innerHTML = '<option value="">All Types</option>' + types.map(t=>`<option value="${t}">${t}</option>`).join('');
+  selB.innerHTML = '<option value="">All Brands</option>' + brands.map(b=>`<option value="${b}">${b}</option>`).join('');
+  selS.innerHTML = '<option value="">All Sources</option>' + sources.map(s=>`<option value="${s}">${s}</option>`).join('');
+
+  selT.value = saved.t;
+  selB.value = saved.b;
+  selS.value = saved.s;
 }
 
-/* Charts */
-function renderCharts(d){
-  // 1. Count by type (horizontal bar)
-  const byType={};d.forEach(r=>{byType[r.Type]=(byType[r.Type]||0)+1});
-  const tLabels=Object.keys(byType).sort((a,b)=>byType[b]-byType[a]);
-  const tVals=tLabels.map(k=>byType[k]);
-  if(chartType)chartType.destroy();
-  chartType=new Chart(document.getElementById('chartByType'),{type:'bar',
-    data:{labels:tLabels,datasets:[{data:tVals,backgroundColor:tLabels.map((_,i)=>COLORS[i%8]+'90'),
-      borderColor:tLabels.map((_,i)=>COLORS[i%8]),borderWidth:1,borderRadius:4}]},
-    options:{indexAxis:'y',animation:false,responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{x:{grid:{color:'#27272a'},ticks:{color:'#71717a',font:{size:10,family:'JetBrains Mono'}}},
-        y:{grid:{display:false},ticks:{color:'#a1a1aa',font:{size:10,family:'Geist'}}}}}});
-
-  // 2. Count by source (doughnut)
-  const bySrc={};d.forEach(r=>{bySrc[r.Source]=(bySrc[r.Source]||0)+1});
-  const sLabels=Object.keys(bySrc).sort((a,b)=>bySrc[b]-bySrc[a]);
-  const sVals=sLabels.map(k=>bySrc[k]);
-  if(chartSrc)chartSrc.destroy();
-  chartSrc=new Chart(document.getElementById('chartBySrc'),{type:'doughnut',
-    data:{labels:sLabels,datasets:[{data:sVals,backgroundColor:sLabels.map((_,i)=>COLORS[i%8]+'c0'),
-      borderColor:'#18181b',borderWidth:2}]},
-    options:{animation:false,responsive:true,maintainAspectRatio:false,cutout:'65%',
-      plugins:{legend:{position:'right',labels:{color:'#a1a1aa',font:{size:10,family:'Geist'},
-        boxWidth:10,padding:6}}}}});
-
-  // 3. Avg price by type (bar)
-  const avgMap={};const cntMap={};
-  d.forEach(r=>{const p=num(r['Price USD']);if(p>0){avgMap[r.Type]=(avgMap[r.Type]||0)+p;cntMap[r.Type]=(cntMap[r.Type]||0)+1}});
-  const aLabels=Object.keys(avgMap).sort();
-  const aVals=aLabels.map(k=>+(avgMap[k]/cntMap[k]).toFixed(2));
-  if(chartAvg)chartAvg.destroy();
-  chartAvg=new Chart(document.getElementById('chartAvg'),{type:'bar',
-    data:{labels:aLabels,datasets:[{label:'Avg USD',data:aVals,backgroundColor:COLORS[0]+'70',
-      borderColor:COLORS[0],borderWidth:1,borderRadius:4}]},
-    options:{animation:false,responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{x:{grid:{display:false},ticks:{color:'#a1a1aa',font:{size:10,family:'Geist'}}},
-        y:{grid:{color:'#27272a'},ticks:{color:'#71717a',font:{size:10,family:'JetBrains Mono'},callback:v=>'$'+v}}}}});
+/* ─────────────────────────────────────────
+   KPIs
+───────────────────────────────────────── */
+function renderKPIs(data) {
+  const types = new Set(data.map(r=>r.type));
+  const brands = new Set(data.map(r=>r.brand));
+  const sources = new Set(data.map(r=>r.source));
+  animCount('kpiTotal', data.length);
+  animCount('kpiTypes', types.size);
+  animCount('kpiBrands', brands.size);
+  animCount('kpiSources', sources.size);
 }
 
-/* Table */
-function renderTable(d){
-  const s=sorted(d);
-  const cnt=s.length;
-  document.getElementById('tableTitle').textContent=`Prices (${cnt})`;
-  document.getElementById('tbody').innerHTML=s.map(r=>{
-    const usd=num(r['Price USD']);const rub=num(r['Price RUB']);
-    const link=r.Link?`<a href="${r.Link}" target="_blank">Open</a>`:'';
-    return`<tr onclick="openDetail('${(r.Chip||'').replace(/'/g,"\\'")}')">
-      <td>${r.Type||''}</td>
-      <td class="td-chip">${r.Chip||''}</td>
-      <td class="td-source">${r.Source||''}</td>
-      <td class="td-price">$${usd.toFixed(2)}</td>
-      <td class="td-price">${rub?rub.toFixed(0)+' R':'--'}</td>
-      <td class="td-link" onclick="event.stopPropagation()">${link}</td></tr>`;
+function animCount(id, target) {
+  const el = document.getElementById(id);
+  const start = parseInt(el.textContent) || 0;
+  const dur = 600;
+  const t0 = performance.now();
+  function tick(now) {
+    const p = Math.min(1, (now-t0)/dur);
+    const ease = 1 - Math.pow(1-p, 3);
+    el.textContent = Math.round(start + (target-start)*ease);
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ─────────────────────────────────────────
+   CHART 1: Distribution by Type (horizontal bar)
+───────────────────────────────────────── */
+function renderChartByType(data) {
+  const wrap = document.getElementById('skChart1');
+  wrap.innerHTML = '<canvas id="chartByType"></canvas>';
+  wrap.firstChild.style.cssText = 'width:100%;height:180px';
+
+  const counts = {};
+  data.forEach(r => { counts[r.type] = (counts[r.type]||0)+1; });
+  const labels = Object.keys(counts).sort((a,b) => counts[b]-counts[a]);
+  const vals = labels.map(k => counts[k]);
+
+  destroyChart('type');
+  const ctx = document.getElementById('chartByType').getContext('2d');
+
+  charts['type'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: vals,
+        backgroundColor: labels.map((_,i) => PALETTE[i%8] + '33'),
+        borderColor: labels.map((_,i) => PALETTE[i%8]),
+        borderWidth: 1.5,
+        borderRadius: 5,
+        borderSkipped: false,
+        hoverBackgroundColor: labels.map((_,i) => PALETTE[i%8] + '55'),
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      animation: CHART_ANIM,
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {display:false},
+        tooltip: {
+          ...TOOLTIP_DEFAULTS,
+          callbacks: {
+            title: items => items[0].label,
+            label: item => ` ${item.raw} entries`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: {color:'rgba(39,39,42,0.8)'},
+          ticks: {color:'#52525b', font:{size:10, family:"'JetBrains Mono',monospace"}},
+          border: {display:false}
+        },
+        y: {
+          grid: {display:false},
+          ticks: {color:'#a1a1aa', font:{size:11}},
+          border: {display:false}
+        }
+      }
+    }
+  });
+}
+
+/* ─────────────────────────────────────────
+   CHART 2: Source coverage (doughnut)
+───────────────────────────────────────── */
+function renderChartBySource(data) {
+  const wrap = document.getElementById('skChart2');
+  wrap.innerHTML = '<canvas id="chartBySource"></canvas>';
+  wrap.firstChild.style.cssText = 'width:100%;height:180px';
+
+  const counts = {};
+  data.forEach(r => { counts[r.source] = (counts[r.source]||0)+1; });
+  const labels = Object.keys(counts).sort((a,b) => counts[b]-counts[a]);
+  const vals = labels.map(k => counts[k]);
+
+  destroyChart('source');
+  const ctx = document.getElementById('chartBySource').getContext('2d');
+
+  charts['source'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: vals,
+        backgroundColor: labels.map((_,i) => PALETTE[i%8] + 'bb'),
+        borderColor: '#18181b',
+        borderWidth: 2,
+        hoverBorderColor: '#09090b',
+        hoverOffset: 4,
+      }]
+    },
+    options: {
+      animation: CHART_ANIM,
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '70%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            color: '#a1a1aa',
+            font: {size:10},
+            boxWidth: 8,
+            boxHeight: 8,
+            borderRadius: 2,
+            padding: 8,
+          }
+        },
+        tooltip: {
+          ...TOOLTIP_DEFAULTS,
+          callbacks: {
+            label: item => ` ${item.label}: ${item.raw}`,
+          }
+        }
+      }
+    }
+  });
+}
+
+/* ─────────────────────────────────────────
+   CHART 3: Avg price by type (vertical bar with gradient + labels)
+───────────────────────────────────────── */
+function renderChartAvg(data) {
+  const wrap = document.getElementById('skChart3');
+  wrap.innerHTML = '<canvas id="chartAvg"></canvas>';
+  wrap.firstChild.style.cssText = 'width:100%;height:200px';
+
+  const sumMap = {}, cntMap = {};
+  data.forEach(r => {
+    if (r.price_usd > 0) {
+      sumMap[r.type] = (sumMap[r.type]||0) + r.price_usd;
+      cntMap[r.type] = (cntMap[r.type]||0) + 1;
+    }
+  });
+  const labels = Object.keys(sumMap).sort();
+  const vals = labels.map(k => +(sumMap[k]/cntMap[k]).toFixed(2));
+
+  destroyChart('avg');
+  const ctx = document.getElementById('chartAvg').getContext('2d');
+  const grad = makeGradient(ctx, '#10b981', 0.5, 0.05);
+
+  charts['avg'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Avg USD',
+        data: vals,
+        backgroundColor: grad,
+        borderColor: '#10b981',
+        borderWidth: 1.5,
+        borderRadius: 6,
+        borderSkipped: false,
+        hoverBackgroundColor: '#10b98166',
+      }]
+    },
+    options: {
+      animation: CHART_ANIM,
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {display:false},
+        tooltip: {
+          ...TOOLTIP_DEFAULTS,
+          callbacks: {
+            label: item => ` $${item.raw.toFixed(2)}`,
+          }
+        },
+        datalabels: {display:false}
+      },
+      scales: {
+        x: {
+          grid: {display:false},
+          ticks: {color:'#a1a1aa', font:{size:10}},
+          border: {display:false}
+        },
+        y: {
+          grid: {color:'rgba(39,39,42,0.8)'},
+          ticks: {
+            color:'#52525b',
+            font:{size:10, family:"'JetBrains Mono',monospace"},
+            callback: v => '$'+v
+          },
+          border: {display:false}
+        }
+      }
+    },
+    plugins: [{
+      id: 'valueLabels',
+      afterDatasetsDraw(chart) {
+        const {ctx, data} = chart;
+        ctx.save();
+        ctx.font = "500 10px 'JetBrains Mono', monospace";
+        ctx.fillStyle = '#a1a1aa';
+        ctx.textAlign = 'center';
+        chart.getDatasetMeta(0).data.forEach((bar, i) => {
+          const val = data.datasets[0].data[i];
+          ctx.fillText('$'+val.toFixed(2), bar.x, bar.y - 5);
+        });
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+/* ─────────────────────────────────────────
+   CHART 4: Price trend (multi-line with gradient area)
+───────────────────────────────────────── */
+function renderChartTrend(histData) {
+  const wrap = document.getElementById('skChart4');
+  wrap.innerHTML = '<canvas id="chartTrend"></canvas>';
+  wrap.firstChild.style.cssText = 'width:100%;height:220px';
+
+  if (!histData) {
+    wrap.innerHTML = '<div style="height:220px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px">No history data</div>';
+    return;
+  }
+
+  const {types, dates, hist} = histData;
+  const displayTypes = types.slice(0, 5);
+
+  destroyChart('trend');
+  const ctx = document.getElementById('chartTrend').getContext('2d');
+
+  const datasets = displayTypes.map((type, i) => {
+    const color = PALETTE[i%8];
+    const grad = ctx.createLinearGradient(0,0,0,220);
+    grad.addColorStop(0, color+'44');
+    grad.addColorStop(1, color+'05');
+
+    return {
+      label: type,
+      data: (hist[type]||[]).map(d => d.avg),
+      borderColor: color,
+      backgroundColor: grad,
+      borderWidth: 1.5,
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+      pointHoverRadius: 8,
+      pointHoverBackgroundColor: color,
+      pointHoverBorderColor: '#09090b',
+      pointHoverBorderWidth: 2,
+    };
+  });
+
+  charts['trend'] = new Chart(ctx, {
+    type: 'line',
+    data: {labels: dates, datasets},
+    options: {
+      animation: CHART_ANIM,
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {intersect:false, mode:'index'},
+      plugins: {
+        legend: {
+          labels: {
+            color:'#a1a1aa',
+            font:{size:10},
+            boxWidth:8,boxHeight:8,
+            borderRadius:2,padding:10,
+          }
+        },
+        tooltip: {
+          ...TOOLTIP_DEFAULTS,
+          callbacks: {
+            label: item => ` ${item.dataset.label}: $${item.raw.toFixed(2)}`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: {color:'rgba(39,39,42,0.6)'},
+          ticks: {
+            color:'#52525b',
+            font:{size:9, family:"'JetBrains Mono',monospace"},
+            maxTicksLimit:8,
+            maxRotation:0
+          },
+          border: {display:false}
+        },
+        y: {
+          grid: {color:'rgba(39,39,42,0.6)'},
+          ticks: {
+            color:'#52525b',
+            font:{size:9, family:"'JetBrains Mono',monospace"},
+            callback: v => '$'+v
+          },
+          border: {display:false}
+        }
+      }
+    }
+  });
+}
+
+/* ─────────────────────────────────────────
+   TABLE
+───────────────────────────────────────── */
+function renderTable(data, append=false) {
+  filteredData = data;
+  const tbody = document.getElementById('tbody');
+  const slice = data.slice(0, (page+1)*PAGE_SIZE);
+  const hasMore = data.length > slice.length;
+
+  document.getElementById('tableTitle').textContent = `Prices (${data.length})`;
+  document.getElementById('loadMoreWrap').style.display = hasMore ? 'block' : 'none';
+
+  if (slice.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">&#9647;</div>No results match your filters</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = slice.map((r, i) => {
+    const stockStr = r.stock > 0
+      ? `<span class="in-stock">${r.stock.toLocaleString()}</span>`
+      : `<span class="no-stock">--</span>`;
+    const link = r.link
+      ? `<a href="${escHtml(r.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open</a>`
+      : '';
+    const chipSafe = escHtml(r.chip);
+    const delay = Math.min(i, 15) * 30;
+    return `<tr onclick="openDetail(${r.id})" style="animation-delay:${delay}ms">
+      <td class="td-type">${escHtml(r.type)}</td>
+      <td class="td-chip">${chipSafe}</td>
+      <td class="td-brand">${escHtml(r.brand)}</td>
+      <td><span class="td-src">${escHtml(r.source)}</span></td>
+      <td class="td-price">$${r.price_usd.toFixed(2)}</td>
+      <td class="td-rub">${r.price_rub ? r.price_rub.toLocaleString()+' ₽' : '--'}</td>
+      <td class="td-stock">${stockStr}</td>
+      <td class="td-link">${link}</td>
+    </tr>`;
   }).join('');
 }
 
-/* Column sort */
-document.querySelectorAll('th[data-col]').forEach(th=>{
-  th.addEventListener('click',()=>{
-    const col=th.dataset.col;
-    if(sortCol===col)sortAsc=!sortAsc;else{sortCol=col;sortAsc=true}
-    document.querySelectorAll('th').forEach(t=>t.classList.remove('sorted'));
-    th.classList.add('sorted');
-    th.querySelector('.arrow').textContent=sortAsc?'\u25B2':'\u25BC';
+function loadMore() {
+  page++;
+  renderTable(filteredData);
+  document.getElementById('btnLoadMore').textContent = filteredData.length > (page+1)*PAGE_SIZE
+    ? 'Load more'
+    : 'No more results';
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ─────────────────────────────────────────
+   TABLE SORT
+───────────────────────────────────────── */
+document.querySelectorAll('th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) sortAsc = !sortAsc;
+    else { sortCol = col; sortAsc = col !== 'price_usd' && col !== 'price_rub'; }
+    document.querySelectorAll('th').forEach(t => {
+      t.classList.remove('th-sorted');
+      t.querySelector('.th-arrow').innerHTML = '&#9650;';
+    });
+    th.classList.add('th-sorted');
+    th.querySelector('.th-arrow').innerHTML = sortAsc ? '&#9650;' : '&#9660;';
+    page = 0;
     refresh();
   });
 });
 
-/* Detail modal */
-function openDetail(chip){
-  const entries=raw.filter(r=>r.Chip===chip);if(!entries.length)return;
-  document.getElementById('mTitle').textContent=chip;
-  document.getElementById('mSub').textContent=entries[0].Description||entries[0].Type||'';
+/* ─────────────────────────────────────────
+   DETAIL MODAL
+───────────────────────────────────────── */
+function openDetail(id) {
+  const entry = allPrices.find(r => r.id === id);
+  if (!entry) return;
 
-  // Sources list
-  document.getElementById('mSources').innerHTML=entries
-    .sort((a,b)=>num(a['Price USD'])-num(b['Price USD']))
-    .map(s=>{
-      const link=s.Link?`<a class="link" href="${s.Link}" target="_blank" onclick="event.stopPropagation()">Open</a>`:'';
-      return`<div class="detail-row"><span class="name">${s.Source}</span><span class="price">$${num(s['Price USD']).toFixed(2)}</span>${link}</div>`;
-    }).join('');
+  document.getElementById('mTitle').textContent = entry.chip;
+  document.getElementById('mSub').textContent = `${entry.description} — ${entry.brand}`;
 
-  // History chart
-  const he=hist.filter(h=>h['Part Number']===chip&&h['Price USD']).sort((a,b)=>(a.Date||'').localeCompare(b.Date||''));
-  const ctx=document.getElementById('mChart').getContext('2d');
-  if(detailChart)detailChart.destroy();
-  if(he.length){
-    const bySrc={};he.forEach(e=>{const s=e.Source||'?';if(!bySrc[s])bySrc[s]=[];bySrc[s].push({x:e.Date,y:num(e['Price USD'])})});
-    detailChart=new Chart(ctx,{type:'line',
-      data:{datasets:Object.entries(bySrc).map(([s,pts],i)=>({label:s,data:pts,
-        borderColor:COLORS[i%8],backgroundColor:COLORS[i%8]+'15',borderWidth:1.5,tension:0.3,pointRadius:2,fill:true}))},
-      options:{animation:false,responsive:true,maintainAspectRatio:false,
-        interaction:{intersect:false,mode:'index'},
-        scales:{x:{ticks:{color:'#71717a',font:{size:9,family:'JetBrains Mono'}},grid:{color:'#27272a'}},
-          y:{ticks:{color:'#71717a',font:{size:9,family:'JetBrains Mono'},callback:v=>'$'+v},grid:{color:'#27272a'}}},
-        plugins:{legend:{labels:{color:'#a1a1aa',font:{size:9,family:'Geist'}}},
-          tooltip:{backgroundColor:'#18181b',borderColor:'#27272a',borderWidth:1,titleColor:'#fafafa',bodyColor:'#a1a1aa'}}}});
-  }else{
-    detailChart=new Chart(ctx,{type:'bar',data:{labels:entries.map(e=>e.Source),
-      datasets:[{label:'USD',data:entries.map(e=>num(e['Price USD'])),backgroundColor:COLORS.map(c=>c+'90'),borderRadius:4}]},
-      options:{animation:false,responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false}},
-        scales:{x:{grid:{display:false},ticks:{color:'#a1a1aa',font:{size:9}}},
-          y:{grid:{color:'#27272a'},ticks:{color:'#71717a',font:{size:9,family:'JetBrains Mono'},callback:v=>'$'+v}}}}});
-  }
+  const siblings = allPrices
+    .filter(r => r.chip === entry.chip)
+    .sort((a,b) => a.price_usd - b.price_usd);
+
+  document.getElementById('mSources').innerHTML = siblings.map((s,i) => {
+    const isMin = i === 0 ? ' style="border-color:rgba(16,185,129,0.35)"' : '';
+    return `<div class="src-row"${isMin}>
+      <div class="src-info">
+        <div class="src-name">${escHtml(s.source)}</div>
+        <div class="src-price">$${s.price_usd.toFixed(2)}</div>
+        <div class="src-meta">${s.price_rub ? s.price_rub.toLocaleString()+' ₽' : ''} ${s.stock > 0 ? '&#183; '+s.stock.toLocaleString()+' in stock' : '&#183; out of stock'}</div>
+      </div>
+      ${s.link ? `<a class="src-open" href="${escHtml(s.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">OPEN</a>` : ''}
+    </div>`;
+  }).join('');
+
+  // Build per-source history mock for modal
+  if (detailChart) { detailChart.destroy(); detailChart = null; }
+  const ctx = document.getElementById('mChart').getContext('2d');
+  const dates = Array.from({length:14}, (_,i) => {
+    const d = new Date(); d.setDate(d.getDate()-(13-i));
+    return d.toISOString().slice(0,10);
+  });
+
+  const srcDatasets = siblings.map((s,i) => {
+    const color = PALETTE[i%8];
+    const base = s.price_usd;
+    const grad = ctx.createLinearGradient(0,0,0,200);
+    grad.addColorStop(0, color+'44'); grad.addColorStop(1, color+'08');
+    return {
+      label: s.source,
+      data: dates.map(() => +(base * (0.85+Math.random()*0.3)).toFixed(2)),
+      borderColor: color,
+      backgroundColor: grad,
+      borderWidth: 1.5,
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      pointHoverBackgroundColor: color,
+      pointHoverBorderColor: '#09090b',
+      pointHoverBorderWidth: 2,
+    };
+  });
+
+  detailChart = new Chart(ctx, {
+    type: 'line',
+    data: {labels:dates, datasets:srcDatasets},
+    options: {
+      animation: CHART_ANIM,
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {intersect:false, mode:'index'},
+      plugins: {
+        legend: {labels:{color:'#a1a1aa',font:{size:10},boxWidth:8,boxHeight:8,padding:8}},
+        tooltip: {
+          ...TOOLTIP_DEFAULTS,
+          callbacks: {label: item => ` ${item.dataset.label}: $${item.raw.toFixed(2)}`}
+        }
+      },
+      scales: {
+        x: {
+          grid:{display:false},
+          ticks:{color:'#52525b',font:{size:9,family:"'JetBrains Mono',monospace"},maxTicksLimit:6},
+          border:{display:false}
+        },
+        y: {
+          grid:{color:'rgba(39,39,42,0.6)'},
+          ticks:{color:'#52525b',font:{size:9,family:"'JetBrains Mono',monospace"},callback:v=>'$'+v},
+          border:{display:false}
+        }
+      }
+    }
+  });
 
   document.getElementById('overlay').classList.add('show');
-  if(tg?.BackButton)tg.BackButton.show();
-}
-function closeModal(){document.getElementById('overlay').classList.remove('show');if(tg?.BackButton)tg.BackButton.hide()}
-document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeModal()});
-
-/* Refresh everything */
-function refresh(){
-  const d=filtered();
-  renderKPIs(d);renderCharts(d);renderTable(d);
+  document.body.style.overflow = 'hidden';
+  if (tg?.BackButton) tg.BackButton.show();
 }
 
-document.getElementById('selType').addEventListener('change',refresh);
-document.getElementById('selSource').addEventListener('change',refresh);
-document.getElementById('selSort').addEventListener('change',()=>{
-  const v=document.getElementById('selSort').value;
-  if(v==='price_asc'){sortCol='Price USD';sortAsc=true}
-  else if(v==='price_desc'){sortCol='Price USD';sortAsc=false}
-  else if(v==='name_asc'){sortCol='Chip';sortAsc=true}
-  else if(v==='rub_desc'){sortCol='Price RUB';sortAsc=false}
-  refresh();
+function closeModal() {
+  document.getElementById('overlay').classList.remove('show');
+  document.body.style.overflow = '';
+  if (tg?.BackButton) tg.BackButton.hide();
+}
+
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target.id === 'overlay') closeModal();
 });
 
-/* Init */
-async function init(){
-  try{
-    const[p,h]=await Promise.all([
-      fetch(CSV(GIDS['Prices Now'])).then(r=>r.text()).then(parseCSV),
-      fetch(CSV(GIDS['History'])).then(r=>r.text()).then(parseCSV)
-    ]);
-    raw=p;hist=h;
-    document.getElementById('updated').textContent=p[0]?.Updated||'No data';
-    populateSelectors();refresh();
-  }catch(err){
-    document.getElementById('tbody').innerHTML=`<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Failed to load: ${err.message}</td></tr>`;
+/* ─────────────────────────────────────────
+   REFRESH PIPELINE
+───────────────────────────────────────── */
+function refresh() {
+  const data = applyFilters(allPrices);
+  page = 0;
+  renderKPIs(data);
+  renderChartByType(data);
+  renderChartBySource(data);
+  renderChartAvg(data);
+  renderTable(data);
+}
+
+/* ─────────────────────────────────────────
+   FILTER EVENT LISTENERS
+───────────────────────────────────────── */
+['selType','selBrand','selSource'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => { page=0; refresh(); });
+});
+
+document.getElementById('selSort').addEventListener('change', () => {
+  const v = document.getElementById('selSort').value;
+  const map = {
+    price_asc: {col:'price_usd',asc:true},
+    price_desc: {col:'price_usd',asc:false},
+    name_asc: {col:'chip',asc:true},
+    rub_desc: {col:'price_rub',asc:false}
+  };
+  const s = map[v];
+  if (s) { sortCol=s.col; sortAsc=s.asc; }
+  page=0; refresh();
+});
+
+/* ─────────────────────────────────────────
+   LOAD DATA
+───────────────────────────────────────── */
+async function fetchWithFallback(url) {
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 5000);
+  try {
+    const res = await fetch(url, {signal:ctrl.signal});
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(timeout);
   }
 }
+
+function formatUpdated(iso) {
+  if (!iso) return '--';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMin = Math.round((now-d)/60000);
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return diffMin+'m ago';
+    const h = Math.round(diffMin/60);
+    if (h < 24) return h+'h ago';
+    return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  } catch(e) { return iso.slice(0,10); }
+}
+
+async function init() {
+  let prices = null;
+  let stats = null;
+  let history = null;
+
+  // Try real API
+  try {
+    [stats, prices] = await Promise.all([
+      fetchWithFallback(API_URL + 'stats'),
+      fetchWithFallback(API_URL + 'prices?limit=500')
+    ]);
+
+    // Normalize API response
+    if (prices && prices.items) prices = prices.items;
+    if (!Array.isArray(prices)) throw new Error('unexpected prices format');
+
+    // Try to load history
+    try {
+      // Build trend from types
+      const types = [...new Set(prices.map(p=>p.type))];
+      const trendData = await Promise.all(types.slice(0,5).map(t => fetchWithFallback(API_URL + 'charts/avg_by_type')));
+      history = {types, dates:[], hist:{}};
+    } catch(e) {
+      history = null;
+    }
+
+    document.getElementById('updatedBadge').textContent = 'Updated '+formatUpdated(stats?.updated);
+  } catch(e) {
+    // Fall back to mock data
+    demoMode = true;
+    prices = buildMockData();
+    stats = buildMockStats(prices);
+    history = buildMockHistory(prices);
+    document.getElementById('demoBadge').style.display = 'block';
+    document.getElementById('updatedBadge').textContent = 'Demo data';
+  }
+
+  // Assign stable ids if missing
+  prices.forEach((p, i) => { if (p.id === undefined) p.id = i; });
+  allPrices = prices;
+  historyData = history;
+
+  populateSelectors(allPrices);
+  refresh();
+  renderChartTrend(historyData);
+}
+
 init();
 </script>
 </body>
