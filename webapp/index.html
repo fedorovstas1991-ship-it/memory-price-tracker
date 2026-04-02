@@ -146,7 +146,9 @@ if (tg) {
 async function fetchSheet(sheet) {
   const resp = await fetch(GVIZ(sheet));
   const text = await resp.text();
-  const json = JSON.parse(text.replace(/.*setResponse\(/, '').replace(/\);?\s*$/, ''));
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  const json = JSON.parse(text.substring(start, end + 1));
   const cols = json.table.cols.map(c => c.label);
   return json.table.rows.map(r => {
     const obj = {};
