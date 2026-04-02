@@ -11,7 +11,7 @@ from src.scrapers.base import BaseScraper
 
 logger = logging.getLogger(__name__)
 
-CHIPDIP_CATALOG_URL = "https://www.chipdip.ru/catalog-show/ic-memory"
+CHIPDIP_CATALOG_URL = "https://www.chipdip.ru/catalog-show/ic-memory?x.page=1"
 
 
 def parse_chipdip_catalog(html: str) -> list[dict]:
@@ -59,7 +59,10 @@ class ChipDipScraper(BaseScraper):
             async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
                 resp = await client.get(
                     CHIPDIP_CATALOG_URL,
-                    headers={"Accept-Language": "ru-RU,ru;q=0.9"},
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                        "Accept-Language": "ru-RU,ru;q=0.9",
+                    },
                 )
                 resp.raise_for_status()
                 html = resp.text

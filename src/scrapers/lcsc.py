@@ -13,15 +13,28 @@ logger = logging.getLogger(__name__)
 LCSC_SEARCH_URL = "https://wmsc.lcsc.com/ftps/wm/product/search"
 
 
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.lcsc.com/",
+    "Origin": "https://www.lcsc.com",
+}
+
+
 class LCSCScraper(BaseScraper):
     name = "lcsc"
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str = ""):
         self.api_key = api_key
 
     async def fetch_prices(self, rate_usd_rub: float) -> list[PriceEntry]:
         entries = []
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, headers=BROWSER_HEADERS) as client:
             for part_number, chip_type, description, capacity in WATCHLIST:
                 try:
                     entry = await self._fetch_one(
@@ -39,7 +52,9 @@ class LCSCScraper(BaseScraper):
         rate: float,
     ) -> PriceEntry | None:
         params = {"keyword": part_number}
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers = {}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         resp = await client.get(LCSC_SEARCH_URL, params=params, headers=headers)
         resp.raise_for_status()
         data = resp.json()
