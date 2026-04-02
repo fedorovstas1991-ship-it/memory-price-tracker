@@ -1,0 +1,10 @@
+{
+  "name": "memorydash-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "grammy": "^1.30",
+    "node-fetch": "^3.3"
+  }
+}
