@@ -11,6 +11,8 @@ from src.scrapers.memorymarket import MemoryMarketScraper
 from src.scrapers.chipdip import ChipDipScraper
 from src.scrapers.findchips import FindChipsScraper
 from src.scrapers.szlcsc import SzlcscScraper
+from src.scrapers.jlcpcb import JLCPCBScraper
+from src.scrapers.ebay import EbayScraper
 from src.sheets import update_prices_sheet, update_history_sheet
 
 logging.basicConfig(
@@ -33,6 +35,8 @@ async def run() -> None:
         ChipDipScraper(),
         FindChipsScraper(),
         SzlcscScraper(),
+        JLCPCBScraper(),
+        EbayScraper(),
     ]
 
     all_entries: list[PriceEntry] = []

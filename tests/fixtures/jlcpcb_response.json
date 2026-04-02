@@ -1,0 +1,88 @@
+{
+  "code": 200,
+  "data": {
+    "componentPageInfo": {
+      "total": 1,
+      "list": [
+        {
+          "componentCode": "C499919",
+          "componentModelEn": "KLMAG1JETD-B041",
+          "describe": "-25\u2103~+85\u2103 1.7V~1.95V\u30012.7V~3.6V 16GB 2.7V~3.6V 330MB/S 50MB/S eMMC 5.1 FBGA-153 eMMC ROHS",
+          "stockCount": 3125,
+          "componentPrices": [
+            {
+              "startNumber": 1,
+              "endNumber": 2,
+              "productPrice": 30.0517
+            },
+            {
+              "startNumber": 3,
+              "endNumber": 4,
+              "productPrice": 30.0517
+            },
+            {
+              "startNumber": 5,
+              "endNumber": 29,
+              "productPrice": 30.0517
+            },
+            {
+              "startNumber": 30,
+              "endNumber": 31,
+              "productPrice": 28.7264
+            },
+            {
+              "startNumber": 32,
+              "endNumber": 33,
+              "productPrice": 28.7264
+            },
+            {
+              "startNumber": 34,
+              "endNumber": -1,
+              "productPrice": 28.7264
+            }
+          ],
+          "buyComponentPrices": [
+            {
+              "startNumber": 32,
+              "endNumber": 33,
+              "productPrice": 27.6723
+            },
+            {
+              "startNumber": 1,
+              "endNumber": 2,
+              "productPrice": 28.9489
+            },
+            {
+              "startNumber": 3,
+              "endNumber": 4,
+              "productPrice": 28.9489
+            },
+            {
+              "startNumber": 34,
+              "endNumber": -1,
+              "productPrice": 27.6723
+            },
+            {
+              "startNumber": 30,
+              "endNumber": 31,
+              "productPrice": 27.6723
+            },
+            {
+              "startNumber": 5,
+              "endNumber": 29,
+              "productPrice": 28.9489
+            }
+          ],
+          "lcscGoodsUrl": "https://www.lcsc.com/product-detail/emmc_samsung-klmag1jetd-b041_C499919.html",
+          "minPurchaseNum": 1,
+          "componentBrandEn": "Samsung",
+          "componentTypeEn": "eMMC"
+        }
+      ],
+      "pageNum": 1,
+      "pageSize": 5,
+      "pages": 1
+    }
+  },
+  "message": null
+}
