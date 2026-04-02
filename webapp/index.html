@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Memory Price Tracker</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #1c1c1e; --bg2: #2c2c2e; --bg3: #3a3a3c;
+  --text: #ffffff; --hint: #8e8e93; --accent: #0a84ff;
+  --green: #30d158; --red: #ff453a; --orange: #ff9f0a;
+  --card-radius: 14px;
+}
+body {
+  font-family: -apple-system, 'SF Pro', 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+  padding: 0 12px 80px; overflow-x: hidden;
+}
+.header { padding: 16px 0 8px; text-align: center; }
+.header h1 { font-size: 20px; font-weight: 700; }
+.header .sub { font-size: 13px; color: var(--hint); margin-top: 2px; }
+
+.metrics { display: flex; gap: 8px; margin: 12px 0; overflow-x: auto; }
+.metric-card {
+  flex: 0 0 auto; min-width: 100px; background: var(--bg2);
+  border-radius: 12px; padding: 12px; text-align: center;
+}
+.metric-card .val { font-size: 22px; font-weight: 700; }
+.metric-card .lbl { font-size: 11px; color: var(--hint); margin-top: 2px; }
+
+.filters { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; -webkit-overflow-scrolling: touch; }
+.filters::-webkit-scrollbar { display: none; }
+.pill {
+  flex: 0 0 auto; padding: 6px 14px; border-radius: 20px;
+  background: var(--bg2); color: var(--hint); font-size: 13px; font-weight: 600;
+  border: none; cursor: pointer; white-space: nowrap;
+}
+.pill.active { background: var(--accent); color: #fff; }
+
+.cards { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.card {
+  background: var(--bg2); border-radius: var(--card-radius);
+  padding: 14px; cursor: pointer; position: relative; overflow: hidden;
+}
+.card:active { background: var(--bg3); }
+.card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.card-chip { font-size: 15px; font-weight: 600; }
+.card-type {
+  font-size: 11px; font-weight: 600; padding: 2px 8px;
+  border-radius: 10px; background: var(--bg3); color: var(--hint);
+}
+.card-desc { font-size: 12px; color: var(--hint); margin-top: 4px; }
+.card-prices { display: flex; gap: 16px; margin-top: 10px; align-items: baseline; }
+.card-usd { font-size: 20px; font-weight: 700; }
+.card-rub { font-size: 14px; color: var(--hint); }
+.card-bottom { display: flex; justify-content: space-between; margin-top: 8px; align-items: center; }
+.card-source { font-size: 11px; color: var(--hint); }
+.card-delta {
+  font-size: 12px; font-weight: 600; padding: 2px 8px;
+  border-radius: 8px;
+}
+.delta-up { background: rgba(255,69,58,0.15); color: var(--red); }
+.delta-down { background: rgba(48,209,88,0.15); color: var(--green); }
+.delta-flat { background: rgba(142,142,147,0.15); color: var(--hint); }
+
+.modal-overlay {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7); z-index: 100; align-items: flex-end; justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--bg2); border-radius: 20px 20px 0 0;
+  width: 100%; max-height: 85vh; padding: 16px 16px 32px;
+  overflow-y: auto;
+}
+.modal-handle {
+  width: 36px; height: 4px; background: var(--bg3);
+  border-radius: 2px; margin: 0 auto 12px;
+}
+.modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.modal .sub { font-size: 13px; color: var(--hint); margin-bottom: 16px; }
+.chart-wrap { height: 250px; margin-bottom: 16px; }
+.source-list { display: flex; flex-direction: column; gap: 6px; }
+.source-row {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--bg3); border-radius: 10px; padding: 10px 12px;
+}
+.source-name { font-size: 13px; color: var(--hint); }
+.source-price { font-size: 15px; font-weight: 600; }
+
+.loading { text-align: center; padding: 60px 0; color: var(--hint); }
+.loading .spinner {
+  width: 32px; height: 32px; border: 3px solid var(--bg3);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty { text-align: center; padding: 40px; color: var(--hint); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Memory Prices</h1>
+  <div class="sub" id="lastUpdate">Loading...</div>
+</div>
+
+<div class="metrics" id="metrics"></div>
+<div class="filters" id="filters"></div>
+<div class="cards" id="cards">
+  <div class="loading"><div class="spinner"></div>Loading prices...</div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modal">
+    <div class="modal-handle"></div>
+    <h2 id="modalTitle"></h2>
+    <div class="sub" id="modalSub"></div>
+    <div class="chart-wrap"><canvas id="priceChart"></canvas></div>
+    <div class="source-list" id="sourcePrices"></div>
+  </div>
+</div>
+
+<script>
+const SHEET_ID = '1utDQUWzUZFR1tSYs9miedmzEWMDaic7xCLKBwkF52c8';
+const GVIZ = (sheet) =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheet)}`;
+
+let allPrices = [], historyData = [], activeFilter = 'All', chart = null;
+
+// Telegram Web App
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.expand();
+  tg.setHeaderColor('secondary_bg_color');
+  tg.setBackgroundColor('#1c1c1e');
+  if (tg.BackButton) {
+    tg.BackButton.onClick(() => closeModal());
+  }
+}
+
+// Fetch gviz JSONP
+async function fetchSheet(sheet) {
+  const resp = await fetch(GVIZ(sheet));
+  const text = await resp.text();
+  const json = JSON.parse(text.replace(/.*setResponse\(/, '').replace(/\);?\s*$/, ''));
+  const cols = json.table.cols.map(c => c.label);
+  return json.table.rows.map(r => {
+    const obj = {};
+    r.c.forEach((cell, i) => {
+      obj[cols[i]] = cell ? (cell.v ?? cell.f ?? '') : '';
+    });
+    return obj;
+  });
+}
+
+// Group prices by chip (best price per chip from all sources)
+function groupByChip(prices) {
+  const map = {};
+  for (const p of prices) {
+    const key = p['Chip'] || p['Part Number'] || '';
+    if (!key) continue;
+    if (!map[key] || (p['Price USD'] && p['Price USD'] < map[key].best['Price USD'])) {
+      if (!map[key]) map[key] = { best: p, sources: [] };
+      else map[key].best = p;
+    }
+    if (map[key]) map[key].sources.push(p);
+  }
+  return map;
+}
+
+// Calculate delta from history
+function getDelta(chipName, history) {
+  const entries = history
+    .filter(h => h['Part Number'] === chipName && h['Price USD'])
+    .sort((a, b) => (a['Date'] || '').localeCompare(b['Date'] || ''));
+  if (entries.length < 2) return null;
+  const prev = +entries[entries.length - 2]['Price USD'];
+  const curr = +entries[entries.length - 1]['Price USD'];
+  if (!prev) return null;
+  return ((curr - prev) / prev * 100).toFixed(1);
+}
+
+// Render metrics
+function renderMetrics(prices, history) {
+  const types = new Set(prices.map(p => p['Type']));
+  const sources = new Set(prices.map(p => p['Source']));
+  const updated = prices[0]?.['Updated'] || '—';
+  document.getElementById('lastUpdate').textContent = `Updated: ${updated}`;
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric-card"><div class="val">${prices.length}</div><div class="lbl">Prices</div></div>
+    <div class="metric-card"><div class="val">${types.size}</div><div class="lbl">Chip Types</div></div>
+    <div class="metric-card"><div class="val">${sources.size}</div><div class="lbl">Sources</div></div>
+    <div class="metric-card"><div class="val">${history.length}</div><div class="lbl">History Pts</div></div>
+  `;
+}
+
+// Render filters
+function renderFilters(prices) {
+  const types = ['All', ...new Set(prices.map(p => p['Type']).filter(Boolean))];
+  document.getElementById('filters').innerHTML = types.map(t =>
+    `<button class="pill${t === activeFilter ? ' active' : ''}" onclick="setFilter('${t}')">${t}</button>`
+  ).join('');
+}
+
+function setFilter(type) {
+  activeFilter = type;
+  renderFilters(allPrices);
+  renderCards();
+}
+
+// Render cards
+function renderCards() {
+  const filtered = activeFilter === 'All'
+    ? allPrices
+    : allPrices.filter(p => p['Type'] === activeFilter);
+  const grouped = groupByChip(filtered);
+  const container = document.getElementById('cards');
+
+  if (Object.keys(grouped).length === 0) {
+    container.innerHTML = '<div class="empty">No prices found</div>';
+    return;
+  }
+
+  container.innerHTML = Object.entries(grouped).map(([chip, data]) => {
+    const p = data.best;
+    const usd = (+p['Price USD']).toFixed(2);
+    const rub = p['Price RUB'] ? (+p['Price RUB']).toFixed(0) : '—';
+    const delta = getDelta(chip, historyData);
+    let deltaHtml = '';
+    if (delta !== null) {
+      const cls = delta > 0 ? 'delta-up' : delta < 0 ? 'delta-down' : 'delta-flat';
+      const sign = delta > 0 ? '+' : '';
+      deltaHtml = `<span class="card-delta ${cls}">${sign}${delta}%</span>`;
+    }
+    return `
+      <div class="card" onclick="openModal('${chip.replace(/'/g, "\\'")}')">
+        <div class="card-top">
+          <span class="card-chip">${chip}</span>
+          <span class="card-type">${p['Type'] || '—'}</span>
+        </div>
+        <div class="card-desc">${p['Description'] || ''}</div>
+        <div class="card-prices">
+          <span class="card-usd">$${usd}</span>
+          <span class="card-rub">${rub} ₽</span>
+        </div>
+        <div class="card-bottom">
+          <span class="card-source">${data.sources.length} source${data.sources.length > 1 ? 's' : ''} · MOQ ${p['MOQ'] || 1}</span>
+          ${deltaHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Modal with chart
+function openModal(chip) {
+  const grouped = groupByChip(allPrices);
+  const data = grouped[chip];
+  if (!data) return;
+
+  document.getElementById('modalTitle').textContent = chip;
+  document.getElementById('modalSub').textContent = data.best['Description'] || data.best['Type'] || '';
+
+  // Source prices
+  document.getElementById('sourcePrices').innerHTML = data.sources
+    .sort((a, b) => (+a['Price USD']) - (+b['Price USD']))
+    .map(s => `
+      <div class="source-row">
+        <span class="source-name">${s['Source']}</span>
+        <span class="source-price">$${(+s['Price USD']).toFixed(2)}</span>
+      </div>
+    `).join('');
+
+  // Chart
+  const entries = historyData
+    .filter(h => h['Part Number'] === chip && h['Price USD'])
+    .sort((a, b) => (a['Date'] || '').localeCompare(b['Date'] || ''));
+
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  if (chart) chart.destroy();
+
+  if (entries.length > 0) {
+    // Group by source
+    const bySource = {};
+    for (const e of entries) {
+      const src = e['Source'] || 'unknown';
+      if (!bySource[src]) bySource[src] = [];
+      bySource[src].push({ x: e['Date'], y: +e['Price USD'] });
+    }
+    const colors = ['#0a84ff', '#30d158', '#ff9f0a', '#ff453a', '#bf5af2', '#64d2ff'];
+    const datasets = Object.entries(bySource).map(([src, pts], i) => ({
+      label: src,
+      data: pts,
+      borderColor: colors[i % colors.length],
+      backgroundColor: colors[i % colors.length] + '20',
+      borderWidth: 2,
+      tension: 0.3,
+      pointRadius: 3,
+      fill: true,
+    }));
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { datasets },
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        scales: {
+          x: { type: 'category', ticks: { color: '#8e8e93', font: { size: 10 } }, grid: { color: '#3a3a3c' } },
+          y: { ticks: { color: '#8e8e93', callback: v => '$' + v }, grid: { color: '#3a3a3c' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#fff', font: { size: 11 } } },
+          tooltip: {
+            backgroundColor: '#2c2c2e',
+            titleColor: '#fff',
+            bodyColor: '#8e8e93',
+            callbacks: { label: ctx => `${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}` },
+          },
+        },
+      },
+    });
+  } else {
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: ['No data'], datasets: [{ data: [0], borderColor: '#3a3a3c' }] },
+      options: { animation: false, responsive: true, maintainAspectRatio: false },
+    });
+  }
+
+  document.getElementById('modalOverlay').classList.add('show');
+  if (tg?.BackButton) tg.BackButton.show();
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+  if (tg?.BackButton) tg.BackButton.hide();
+}
+document.getElementById('modalOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'modalOverlay') closeModal();
+});
+
+// Init
+async function init() {
+  try {
+    const [prices, history] = await Promise.all([
+      fetchSheet('Prices Now'),
+      fetchSheet('History'),
+    ]);
+    allPrices = prices;
+    historyData = history;
+    renderMetrics(prices, history);
+    renderFilters(prices);
+    renderCards();
+  } catch (err) {
+    document.getElementById('cards').innerHTML =
+      `<div class="empty">Failed to load data<br><small>${err.message}</small></div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
