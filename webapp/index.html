@@ -126,8 +126,9 @@ body {
 
 <script>
 const SHEET_ID = '1utDQUWzUZFR1tSYs9miedmzEWMDaic7xCLKBwkF52c8';
-const GVIZ = (sheet) =>
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheet)}`;
+const GIDS = { 'Prices Now': 2138457408, 'History': 825033088 };
+const CSV_URL = (gid) =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
 
 let allPrices = [], historyData = [], activeFilter = 'All', chart = null;
 
@@ -142,21 +143,42 @@ if (tg) {
   }
 }
 
-// Fetch gviz JSONP
-async function fetchSheet(sheet) {
-  const resp = await fetch(GVIZ(sheet));
-  const text = await resp.text();
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  const json = JSON.parse(text.substring(start, end + 1));
-  const cols = json.table.cols.map(c => c.label);
-  return json.table.rows.map(r => {
+// Parse CSV text into array of objects
+function parseCSV(text) {
+  const lines = text.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = parseCSVLine(lines[0]);
+  return lines.slice(1).map(line => {
+    const vals = parseCSVLine(line);
     const obj = {};
-    r.c.forEach((cell, i) => {
-      obj[cols[i]] = cell ? (cell.v ?? cell.f ?? '') : '';
-    });
+    headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
     return obj;
   });
+}
+function parseCSVLine(line) {
+  const result = []; let current = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i+1] === '"') { current += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { current += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { result.push(current.trim()); current = ''; }
+      else { current += ch; }
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+// Fetch sheet data via CSV export (CORS-safe)
+async function fetchSheet(sheet) {
+  const gid = GIDS[sheet];
+  const resp = await fetch(CSV_URL(gid));
+  const text = await resp.text();
+  return parseCSV(text);
 }
 
 // Group prices by chip (best price per chip from all sources)
