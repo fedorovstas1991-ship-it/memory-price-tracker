@@ -9,6 +9,8 @@ from src.scrapers.lcsc import LCSCScraper
 from src.scrapers.mouser import MouserScraper
 from src.scrapers.memorymarket import MemoryMarketScraper
 from src.scrapers.chipdip import ChipDipScraper
+from src.scrapers.findchips import FindChipsScraper
+from src.scrapers.szlcsc import SzlcscScraper
 from src.sheets import update_prices_sheet, update_history_sheet
 
 logging.basicConfig(
@@ -29,6 +31,8 @@ async def run() -> None:
         MouserScraper(api_key=MOUSER_API_KEY),
         MemoryMarketScraper(),
         ChipDipScraper(),
+        FindChipsScraper(),
+        SzlcscScraper(),
     ]
 
     all_entries: list[PriceEntry] = []
