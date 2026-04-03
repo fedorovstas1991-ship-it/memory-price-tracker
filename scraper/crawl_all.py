@@ -493,11 +493,11 @@ async def crawl_ebay(rate: float) -> list[dict]:
                 try:
                     url = f"https://www.ebay.com/sch/i.html?_nkw={cat.replace(' ', '+')}&_sacat=0&LH_BIN=1&_pgn=1"
                     page = await session.fetch(url, network_idle=True)
-                    cards = page.css('.s-item', all=True) or []
+                    cards = page.find_all('li', class_='s-item') or []
                     count = 0
                     for card in cards:
-                        price_el = card.css('.s-item__price')
-                        title_el = card.css('.s-item__title span')
+                        price_el = card.find('span', class_='s-item__price')
+                        title_el = card.find('div', class_='s-item__title')
                         if not price_el or not title_el:
                             continue
                         title = title_el.text(strip=True)

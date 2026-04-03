@@ -52,25 +52,51 @@ def test_parse_ebay_search_median():
     assert median == 20.00
 
 
+# ---------------------------------------------------------------------------
+# fetch_prices tests — mock Playwright so no real browser is needed.
+# NOTE: live eBay scraping requires a real playwright/Chromium install.
+# ---------------------------------------------------------------------------
+
+def _make_playwright_mock(html: str):
+    """Build a mock playwright context that returns *html* from page.content()."""
+    # page mock
+    page = AsyncMock()
+    page.goto = AsyncMock()
+    page.content = AsyncMock(return_value=html)
+    page.close = AsyncMock()
+
+    # browser mock
+    browser = AsyncMock()
+    browser.new_page = AsyncMock(return_value=page)
+    browser.close = AsyncMock()
+
+    # chromium launcher
+    chromium = AsyncMock()
+    chromium.launch = AsyncMock(return_value=browser)
+
+    # pw (playwright instance)
+    pw = AsyncMock()
+    pw.chromium = chromium
+    pw.stop = AsyncMock()
+
+    # async_playwright() returns a context manager whose __aenter__ yields pw
+    pw_ctx = AsyncMock()
+    pw_ctx.start = AsyncMock(return_value=pw)
+
+    return pw_ctx, browser, page
+
+
 @pytest.mark.asyncio
 async def test_fetch_prices_uses_median():
     """EbayScraper.fetch_prices should return one entry per chip with median price."""
     html = FIXTURE_PATH.read_text()
-
-    fake_response = MagicMock()
-    fake_response.raise_for_status = MagicMock()
-    fake_response.text = html
-
-    fake_client = AsyncMock()
-    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-    fake_client.__aexit__ = AsyncMock(return_value=False)
-    fake_client.get = AsyncMock(return_value=fake_response)
+    pw_ctx, browser, page = _make_playwright_mock(html)
 
     rate = 90.0
     watchlist = [("TEST-PART-001", "eMMC", "Test 16GB eMMC", "16GB")]
 
     with (
-        patch("src.scrapers.ebay.httpx.AsyncClient", return_value=fake_client),
+        patch("src.scrapers.ebay.async_playwright", return_value=pw_ctx),
         patch("src.scrapers.ebay.WATCHLIST", watchlist),
     ):
         scraper = EbayScraper()
@@ -88,14 +114,12 @@ async def test_fetch_prices_uses_median():
 
 @pytest.mark.asyncio
 async def test_fetch_prices_returns_empty_on_http_error():
-    fake_client = AsyncMock()
-    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-    fake_client.__aexit__ = AsyncMock(return_value=False)
-    fake_client.get = AsyncMock(side_effect=Exception("Network error"))
+    pw_ctx, browser, page = _make_playwright_mock("")
+    page.goto = AsyncMock(side_effect=Exception("Network error"))
 
     watchlist = [("MISSING-CHIP", "DDR4", "Some DDR4", "4Gbit")]
     with (
-        patch("src.scrapers.ebay.httpx.AsyncClient", return_value=fake_client),
+        patch("src.scrapers.ebay.async_playwright", return_value=pw_ctx),
         patch("src.scrapers.ebay.WATCHLIST", watchlist),
     ):
         scraper = EbayScraper()

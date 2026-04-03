@@ -3,7 +3,6 @@ import re
 import statistics
 from datetime import datetime, timezone
 
-import httpx
 from selectolax.parser import HTMLParser
 
 from src.config import WATCHLIST, REQUEST_TIMEOUT
@@ -17,15 +16,10 @@ EBAY_SEARCH_URL = (
     "https://www.ebay.com/sch/i.html?_nkw={part_number}&_sacat=0&LH_BIN=1"
 )
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/131.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html",
-    "Accept-Language": "en-US,en;q=0.9",
-}
+try:
+    from playwright.async_api import async_playwright
+except ImportError:  # pragma: no cover
+    async_playwright = None  # type: ignore[assignment]
 
 
 def parse_ebay_search(html: str) -> list[dict]:
@@ -84,15 +78,34 @@ class EbayScraper(BaseScraper):
         entries: list[PriceEntry] = []
         now = datetime.now(timezone.utc)
 
-        async with httpx.AsyncClient(
-            timeout=REQUEST_TIMEOUT, headers=HEADERS, follow_redirects=True
-        ) as client:
+        # NOTE: live eBay scraping requires playwright (headless Chromium).
+        # Unit tests that mock page.goto / page.content work without a real browser.
+        if async_playwright is None:
+            logger.warning("eBay: playwright not installed, returning empty list")
+            return entries
+
+        try:
+            playwright_ctx = async_playwright()
+            pw = await playwright_ctx.start()
+            browser = await pw.chromium.launch(headless=True)
+        except Exception:
+            logger.warning("eBay: failed to launch browser", exc_info=True)
+            return entries
+
+        try:
             for part_number, chip_type, description, capacity in WATCHLIST:
                 search_url = EBAY_SEARCH_URL.format(part_number=part_number)
                 try:
-                    resp = await client.get(search_url)
-                    resp.raise_for_status()
-                    html = resp.text
+                    page = await browser.new_page()
+                    try:
+                        await page.goto(
+                            search_url,
+                            wait_until="networkidle",
+                            timeout=20000,
+                        )
+                        html = await page.content()
+                    finally:
+                        await page.close()
                 except Exception:
                     logger.warning(
                         "eBay: failed to fetch %s", part_number, exc_info=True
@@ -131,5 +144,8 @@ class EbayScraper(BaseScraper):
                     median_price,
                     closest["title"][:50],
                 )
+        finally:
+            await browser.close()
+            await pw.stop()
 
         return entries
