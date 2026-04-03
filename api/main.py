@@ -1,11 +1,28 @@
+import json
 import os
 from contextlib import asynccontextmanager
+from decimal import Decimal
+from datetime import datetime, date
 from typing import Optional
 
 import asyncpg
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, Decimal):
+            return float(o)
+        if isinstance(o, (datetime, date)):
+            return o.isoformat()
+        return super().default(o)
+
+
+class SafeJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(content, cls=DecimalEncoder, ensure_ascii=False).encode("utf-8")
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -130,7 +147,7 @@ async def get_prices(
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
 
-    return JSONResponse(content=[dict(r) for r in rows])
+    return SafeJSONResponse(content=[dict(r) for r in rows])
 
 
 @app.get("/api/types")
@@ -143,7 +160,7 @@ async def get_types():
     """
     async with pool.acquire() as conn:
         rows = await conn.fetch(query)
-    return JSONResponse(content=[dict(r) for r in rows])
+    return SafeJSONResponse(content=[dict(r) for r in rows])
 
 
 @app.get("/api/brands")
@@ -157,7 +174,7 @@ async def get_brands():
     """
     async with pool.acquire() as conn:
         rows = await conn.fetch(query)
-    return JSONResponse(content=[dict(r) for r in rows])
+    return SafeJSONResponse(content=[dict(r) for r in rows])
 
 
 @app.get("/api/sources")
@@ -170,7 +187,7 @@ async def get_sources():
     """
     async with pool.acquire() as conn:
         rows = await conn.fetch(query)
-    return JSONResponse(content=[dict(r) for r in rows])
+    return SafeJSONResponse(content=[dict(r) for r in rows])
 
 
 @app.get("/api/stats")
@@ -191,7 +208,7 @@ async def get_stats():
     # Serialize datetime to ISO string if present
     if result.get("updated") is not None:
         result["updated"] = result["updated"].isoformat()
-    return JSONResponse(content=result)
+    return SafeJSONResponse(content=result)
 
 
 @app.get("/api/history/{part_number}")
@@ -220,7 +237,7 @@ async def get_history(part_number: str):
                 "price_usd": r["price_usd"],
             }
         )
-    return JSONResponse(content=result)
+    return SafeJSONResponse(content=result)
 
 
 @app.get("/api/charts/avg_by_type")
@@ -246,7 +263,7 @@ async def chart_avg_by_type():
                 "count": r["count"],
             }
         )
-    return JSONResponse(content=result)
+    return SafeJSONResponse(content=result)
 
 
 @app.get("/api/charts/by_source")
@@ -259,4 +276,4 @@ async def chart_by_source():
     """
     async with pool.acquire() as conn:
         rows = await conn.fetch(query)
-    return JSONResponse(content=[dict(r) for r in rows])
+    return SafeJSONResponse(content=[dict(r) for r in rows])
