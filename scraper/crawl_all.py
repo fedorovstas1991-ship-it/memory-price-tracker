@@ -294,12 +294,23 @@ async def _jlcpcb_fetch_pages(
     rate: float,
     source: str,
     distributor: str,
-    delay: float = 3.0,
+    page_delay: float = 3.0,
+    category_delay: float = 15.0,
 ) -> list[dict]:
-    """Generic paginator over the JLCPCB component search API."""
+    """Generic paginator over the JLCPCB component search API.
+
+    Rate-limit strategy: JLCPCB enforces a per-IP burst limit that kicks in
+    after ~1 request per connection. Opening a fresh connection per category
+    and waiting `category_delay` seconds between categories avoids the 403
+    wall that otherwise kills every category after the first.
+    """
     entries = []
-    async with httpx.AsyncClient(timeout=30, headers=JLCPCB_HEADERS) as client:
-        for cat in categories:
+    for cat_idx, cat in enumerate(categories):
+        if cat_idx > 0:
+            # Pause between categories so the server's rate-limit window resets.
+            await asyncio.sleep(category_delay)
+        # Fresh client per category — avoids connection-level tracking.
+        async with httpx.AsyncClient(timeout=30, headers=JLCPCB_HEADERS) as client:
             for pg in range(1, 50):
                 try:
                     body = {"keyword": cat, "currentPage": pg, "pageSize": 100}
@@ -320,7 +331,7 @@ async def _jlcpcb_fetch_pages(
                         if entry:
                             entries.append(entry)
                     log.info(f"{source}: {cat} page {pg}, {len(items)} items (+{len(entries)-before}), total {len(entries)}")
-                    await asyncio.sleep(delay)
+                    await asyncio.sleep(page_delay)
                 except Exception as e:
                     log.warning(f"{source}: {cat} page {pg} error: {e}")
                     break
@@ -334,7 +345,8 @@ async def crawl_jlcpcb(rate: float) -> list[dict]:
         rate=rate,
         source='jlcpcb',
         distributor='JLCPCB/LCSC',
-        delay=3.0,  # 3-second delay to avoid 403 after page 1 on VPS IPs
+        page_delay=3.0,
+        category_delay=15.0,
     )
     log.info(f"JLCPCB: done, {len(entries)} entries")
     return entries
@@ -365,7 +377,8 @@ async def crawl_lcsc(rate: float) -> list[dict]:
         rate=rate,
         source='lcsc',
         distributor='LCSC',
-        delay=3.0,
+        page_delay=3.0,
+        category_delay=15.0,
     )
     log.info(f"LCSC: done, {len(entries)} entries")
     return entries
