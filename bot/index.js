@@ -18,9 +18,19 @@ bot.command("start", async (ctx) => {
     .text("Поиск по парт-номеру", "search_prompt")
     .text("Статистика", "stats");
 
+  // Fetch real stats
+  let statsLine = '📊 Загружаю статистику...';
+  try {
+    const res = await fetch(`${API_URL}/api/stats`, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const s = await res.json();
+      statsLine = `📊 ${(s.total || 0).toLocaleString('ru-RU')} позиций · ${s.types || 0} типов · ${s.brands || 0} брендов · ${s.sources || 0} источников`;
+    }
+  } catch {}
+
   await ctx.reply(
-    `Привет! Я отслеживаю цены на чипы памяти из 7 источников по всему миру.\n\n` +
-      `📊 ~40 000 позиций\n` +
+    `Привет! Я отслеживаю цены на чипы памяти по всему миру.\n\n` +
+      `${statsLine}\n` +
       `🔄 Обновление каждые 4 часа\n\n` +
       `Основной инструмент — дашборд:\n` +
       `• Фильтры по типу, бренду, объёму, источнику\n` +
