@@ -246,63 +246,128 @@ async def crawl_szlcsc(rate: float) -> list[dict]:
     log.info(f"SZLCSC: done, {len(entries)} entries")
     return entries
 
-async def crawl_jlcpcb(rate: float) -> list[dict]:
-    """JLCPCB — JSON API."""
-    log.info("JLCPCB: starting")
-    entries = []
-    headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
-        "Content-Type": "application/json",
+JLCPCB_API = "https://jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList"
+JLCPCB_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+    "Content-Type": "application/json",
+    "Referer": "https://jlcpcb.com/parts/componentSearch",
+    "Origin": "https://jlcpcb.com",
+}
+
+def _extract_best_price(prices: list) -> float:
+    """Return lowest qty-1 price from a JLCPCB componentPrices list."""
+    best = 0.0
+    for tier in prices:
+        p = float(tier.get('productPrice', 0) or 0)
+        q = int(tier.get('startNumber', 0) or 0)
+        if p > 0 and (q <= 10 or best == 0):
+            best = p
+    return best
+
+def _jlcpcb_item_to_entry(item: dict, rate: float, source: str, distributor: str) -> dict | None:
+    """Convert a raw JLCPCB list item to a normalised price entry. Returns None if unusable."""
+    pn = item.get('componentModelEn', '')
+    if not pn:
+        return None
+    desc = item.get('describe', '') or ''
+    best = _extract_best_price(item.get('componentPrices', []))
+    if best <= 0:
+        return None
+    return {
+        'chip_type': classify_type(pn, desc),
+        'part_number': pn,
+        'description': desc[:200],
+        'brand': extract_brand(pn, desc),
+        'capacity': '',
+        'source': source,
+        'distributor': distributor,
+        'price_usd': round(best, 4),
+        'price_rub': round(best * rate, 2),
+        'price_cny': None,
+        'moq': int(item.get('minPurchaseNum', item.get('leastNumber', 1)) or 1),
+        'stock': int(item.get('stockCount', 0) or 0),
+        'url': item.get('lcscGoodsUrl', ''),
     }
-    API = "https://jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList"
-    async with httpx.AsyncClient(timeout=20, headers=headers) as client:
-        for cat in CATEGORIES:
+
+async def _jlcpcb_fetch_pages(
+    categories: list[str],
+    rate: float,
+    source: str,
+    distributor: str,
+    delay: float = 3.0,
+) -> list[dict]:
+    """Generic paginator over the JLCPCB component search API."""
+    entries = []
+    async with httpx.AsyncClient(timeout=30, headers=JLCPCB_HEADERS) as client:
+        for cat in categories:
             for pg in range(1, 50):
                 try:
                     body = {"keyword": cat, "currentPage": pg, "pageSize": 100}
-                    resp = await client.post(API, json=body)
+                    resp = await client.post(JLCPCB_API, json=body)
                     if resp.status_code == 403:
-                        log.warning(f"JLCPCB: {cat} page {pg} — 403, moving on")
+                        log.warning(f"{source}: {cat} page {pg} — 403 (rate-limited), skipping category")
                         break
                     if resp.status_code != 200:
+                        log.warning(f"{source}: {cat} page {pg} — HTTP {resp.status_code}, stopping")
                         break
                     data = resp.json()
                     items = data.get('data', {}).get('componentPageInfo', {}).get('list', [])
                     if not items:
                         break
+                    before = len(entries)
                     for item in items:
-                        pn = item.get('componentModelEn', '')
-                        desc = item.get('describe', '')
-                        prices = item.get('componentPrices', [])
-                        best = 0.0
-                        for tier in prices:
-                            p = float(tier.get('productPrice', 0) or 0)
-                            q = int(tier.get('startNumber', 0) or 0)
-                            if p > 0 and (q <= 10 or best == 0):
-                                best = p
-                        if best <= 0 or not pn:
-                            continue
-                        entries.append({
-                            'chip_type': classify_type(pn, desc),
-                            'part_number': pn,
-                            'description': desc[:200],
-                            'brand': extract_brand(pn, desc),
-                            'capacity': '',
-                            'source': 'jlcpcb',
-                            'distributor': 'JLCPCB/LCSC',
-                            'price_usd': round(best, 4),
-                            'price_rub': round(best * rate, 2),
-                            'price_cny': None,
-                            'moq': int(item.get('leastNumber', 1) or 1),
-                            'stock': int(item.get('stockCount', 0) or 0),
-                            'url': item.get('lcscGoodsUrl', ''),
-                        })
-                    log.info(f"JLCPCB: {cat} page {pg}, {len(items)} items, total {len(entries)}")
-                    await asyncio.sleep(2)
+                        entry = _jlcpcb_item_to_entry(item, rate, source, distributor)
+                        if entry:
+                            entries.append(entry)
+                    log.info(f"{source}: {cat} page {pg}, {len(items)} items (+{len(entries)-before}), total {len(entries)}")
+                    await asyncio.sleep(delay)
                 except Exception as e:
-                    log.warning(f"JLCPCB: {cat} page {pg} error: {e}")
+                    log.warning(f"{source}: {cat} page {pg} error: {e}")
                     break
+    return entries
+
+async def crawl_jlcpcb(rate: float) -> list[dict]:
+    """JLCPCB SMT component library — JSON API with anti-rate-limit delay."""
+    log.info("JLCPCB: starting")
+    entries = await _jlcpcb_fetch_pages(
+        categories=CATEGORIES,
+        rate=rate,
+        source='jlcpcb',
+        distributor='JLCPCB/LCSC',
+        delay=3.0,  # 3-second delay to avoid 403 after page 1 on VPS IPs
+    )
     log.info(f"JLCPCB: done, {len(entries)} entries")
+    return entries
+
+
+# ─── LCSC International ──────────────────────────────────────────────
+
+# Keywords specifically effective for LCSC's international catalogue.
+# Subset of CATEGORIES optimised for the LCSC search index (avoids
+# redundant queries that return 0 results on the LCSC side).
+LCSC_KEYWORDS = [
+    "eMMC", "UFS", "DDR4", "DDR5", "DDR3",
+    "LPDDR4", "LPDDR5", "NAND Flash", "NOR Flash", "SRAM",
+    "Flash Memory", "DRAM", "SDRAM",
+]
+
+async def crawl_lcsc(rate: float) -> list[dict]:
+    """LCSC International (lcsc.com) — uses the JLCPCB/LCSC component search JSON API.
+
+    The endpoint is shared infrastructure: results have lcscGoodsUrl pointing to
+    lcsc.com product pages and USD prices already denominated in USD.
+    We tag entries source='lcsc' / distributor='LCSC' to keep them separate from
+    the JLCPCB SMT-library entries.
+    """
+    log.info("LCSC: starting")
+    entries = await _jlcpcb_fetch_pages(
+        categories=LCSC_KEYWORDS,
+        rate=rate,
+        source='lcsc',
+        distributor='LCSC',
+        delay=3.0,
+    )
+    log.info(f"LCSC: done, {len(entries)} entries")
     return entries
 
 async def crawl_memorymarket(rate: float) -> list[dict]:
@@ -587,12 +652,13 @@ async def main():
         crawl_findchips(rate),
         crawl_szlcsc(rate),
         crawl_jlcpcb(rate),
+        crawl_lcsc(rate),
         crawl_memorymarket(rate),
         return_exceptions=True,
     )
 
     all_entries = []
-    for name, result in zip(['findchips', 'szlcsc', 'jlcpcb', 'memorymarket'], http_results):
+    for name, result in zip(['findchips', 'szlcsc', 'jlcpcb', 'lcsc', 'memorymarket'], http_results):
         if isinstance(result, Exception):
             log.error(f"{name}: FAILED — {result}")
         else:
