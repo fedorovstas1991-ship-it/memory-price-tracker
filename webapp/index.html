@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Memory Prices</title>
+<title>Memory Prices BI</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -25,6 +25,8 @@
   --accent:#10b981;
   --accent-dim:rgba(16,185,129,0.12);
   --accent-glow:rgba(16,185,129,0.25);
+  --blue:#3b82f6;
+  --blue-dim:rgba(59,130,246,0.12);
   --r:10px;
   --r-sm:6px;
   --r-lg:14px;
@@ -41,8 +43,6 @@ body{
   line-height:1.5;
 }
 .mono{font-family:'JetBrains Mono',monospace}
-
-/* ── Scrollbar ── */
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
@@ -58,273 +58,292 @@ body{
   height:52px;
   display:flex;align-items:center;justify-content:space-between;
 }
-#topbar h1{
-  font-size:15px;font-weight:700;letter-spacing:-0.03em;
-  line-height:1;
-}
+#topbar h1{font-size:15px;font-weight:700;letter-spacing:-0.03em;line-height:1}
 #topbar h1 span{color:var(--accent)}
 .topbar-right{display:flex;align-items:center;gap:8px}
 #updatedBadge{
   font-family:'JetBrains Mono',monospace;
   font-size:10px;color:var(--text3);
-  background:var(--bg2);
-  border:1px solid var(--border);
-  border-radius:4px;padding:3px 7px;
-  white-space:nowrap;
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:4px;padding:3px 7px;white-space:nowrap;
 }
 #demoBadge{
   display:none;
   font-size:10px;font-weight:600;
-  background:rgba(245,158,11,0.15);
-  color:#f59e0b;
+  background:rgba(245,158,11,0.15);color:#f59e0b;
   border:1px solid rgba(245,158,11,0.3);
-  border-radius:4px;padding:3px 7px;
-  letter-spacing:0.04em;
+  border-radius:4px;padding:3px 7px;letter-spacing:0.04em;
 }
 
-/* ── Filter bar ── */
-#filterbar{
+/* ── Mega filter bar ── */
+#megaFilter{
   position:sticky;top:52px;z-index:55;
-  background:rgba(9,9,11,0.88);
-  backdrop-filter:blur(10px);
-  -webkit-backdrop-filter:blur(10px);
+  background:rgba(9,9,11,0.92);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
   border-bottom:1px solid var(--border);
-  padding:8px 16px;
-  display:flex;gap:6px;
-  overflow-x:auto;
-  -webkit-overflow-scrolling:touch;
+  padding:10px 16px;
+  display:flex;flex-direction:column;gap:8px;
 }
-#filterbar::-webkit-scrollbar{display:none}
+.mega-row{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.mega-row::-webkit-scrollbar{display:none}
+.mega-label{
+  font-size:10px;font-weight:600;color:var(--text3);
+  text-transform:uppercase;letter-spacing:0.08em;
+  white-space:nowrap;flex-shrink:0;
+  min-width:52px;
+}
+.toggle-btn{
+  flex-shrink:0;
+  padding:6px 14px;
+  border-radius:20px;
+  border:1px solid var(--border2);
+  background:var(--bg2);
+  color:var(--text2);
+  font-size:12px;font-weight:600;
+  font-family:'Geist',system-ui,sans-serif;
+  cursor:pointer;
+  transition:background 0.18s,border-color 0.18s,color 0.18s;
+  white-space:nowrap;
+}
+.toggle-btn.active-flash{
+  background:rgba(59,130,246,0.15);
+  border-color:#3b82f6;
+  color:#3b82f6;
+}
+.toggle-btn.active-ram{
+  background:rgba(168,85,247,0.15);
+  border-color:#a855f7;
+  color:#a855f7;
+}
+.toggle-btn:active{transform:scale(0.96)}
 .sel-wrap{position:relative;flex-shrink:0}
 .sel-wrap::after{
-  content:'';
-  position:absolute;right:9px;top:50%;transform:translateY(-50%);
+  content:'';position:absolute;right:9px;top:50%;transform:translateY(-50%);
   width:0;height:0;
   border-left:4px solid transparent;border-right:4px solid transparent;
-  border-top:5px solid var(--text4);
-  pointer-events:none;
+  border-top:5px solid var(--text4);pointer-events:none;
 }
 select{
   appearance:none;-webkit-appearance:none;
-  background:var(--bg2);
-  color:var(--text);
-  border:1px solid var(--border);
-  border-radius:var(--r-sm);
+  background:var(--bg2);color:var(--text);
+  border:1px solid var(--border);border-radius:var(--r-sm);
   padding:6px 26px 6px 10px;
   font-size:12px;font-weight:500;
   font-family:'Geist',system-ui,sans-serif;
-  cursor:pointer;
-  transition:border-color 0.15s;
-  min-width:0;
+  cursor:pointer;transition:border-color 0.15s;min-width:0;
 }
 select:focus{outline:none;border-color:var(--accent)}
 select:active{transform:scale(0.98)}
 
 /* ── KPI strip ── */
 #kpiStrip{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
+  display:grid;grid-template-columns:repeat(4,1fr);
   border-bottom:1px solid var(--border);
-  margin:0;
 }
 .kpi{
-  padding:14px 12px;
-  border-right:1px solid var(--border);
-  position:relative;
-  overflow:hidden;
+  padding:14px 12px;border-right:1px solid var(--border);
+  position:relative;overflow:hidden;
 }
 .kpi:last-child{border-right:none}
 .kpi-val{
   font-family:'JetBrains Mono',monospace;
-  font-size:19px;font-weight:600;
-  letter-spacing:-0.04em;
-  line-height:1;
-  color:var(--text);
+  font-size:19px;font-weight:600;letter-spacing:-0.04em;
+  line-height:1;color:var(--text);
 }
 .kpi-lbl{
-  font-size:9px;font-weight:600;
-  color:var(--text3);
-  text-transform:uppercase;
-  letter-spacing:0.08em;
-  margin-top:4px;
+  font-size:9px;font-weight:600;color:var(--text3);
+  text-transform:uppercase;letter-spacing:0.08em;margin-top:4px;
 }
 
 /* ── Sections ── */
 .section{padding:16px 16px 0}
-.section-hd{
-  display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:12px;
-}
+.section-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .section-title{
-  font-size:11px;font-weight:600;
-  color:var(--text3);
-  text-transform:uppercase;
-  letter-spacing:0.08em;
+  font-size:11px;font-weight:600;color:var(--text3);
+  text-transform:uppercase;letter-spacing:0.08em;
 }
 
 /* ── Chart cards ── */
 .chart-card{
-  background:var(--bg2);
-  border:1px solid var(--border);
-  border-radius:var(--r-lg);
-  padding:14px;
-  margin-bottom:10px;
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:14px;margin-bottom:10px;
 }
-.chart-card-title{
-  font-size:13px;font-weight:600;
-  letter-spacing:-0.015em;
-  margin-bottom:12px;
-  color:var(--text);
+.chart-card-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.chart-card-title{font-size:13px;font-weight:600;letter-spacing:-0.015em;color:var(--text)}
+.chart-card-controls{display:flex;gap:4px;align-items:center}
+.ctrl-btn{
+  padding:4px 10px;border-radius:20px;
+  border:1px solid var(--border2);
+  background:transparent;color:var(--text3);
+  font-size:10px;font-weight:600;letter-spacing:0.03em;
+  font-family:'Geist',system-ui,sans-serif;
+  cursor:pointer;transition:all 0.15s;white-space:nowrap;
 }
+.ctrl-btn.active{
+  background:var(--accent-dim);border-color:var(--accent);color:var(--accent);
+}
+.ctrl-btn:active{transform:scale(0.95)}
+.ctrl-sel-wrap{position:relative}
+.ctrl-sel-wrap::after{
+  content:'';position:absolute;right:7px;top:50%;transform:translateY(-50%);
+  width:0;height:0;border-left:3px solid transparent;border-right:3px solid transparent;
+  border-top:4px solid var(--text4);pointer-events:none;
+}
+.ctrl-sel{
+  appearance:none;-webkit-appearance:none;
+  background:var(--bg3);color:var(--text2);
+  border:1px solid var(--border2);border-radius:20px;
+  padding:4px 22px 4px 10px;
+  font-size:10px;font-weight:600;
+  font-family:'Geist',system-ui,sans-serif;
+  cursor:pointer;
+}
+.ctrl-sel:focus{outline:none;border-color:var(--accent)}
 .chart-wrap{position:relative}
 .chart-h180{height:180px}
 .chart-h200{height:200px}
 .chart-h220{height:220px}
-
-/* 2-col chart grid */
+.chart-h260{height:260px}
 .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
 @media(max-width:520px){.chart-row{grid-template-columns:1fr}}
 
-/* ── Skeleton loaders ── */
-.skeleton-block{
-  background:var(--bg2);
-  border:1px solid var(--border);
-  border-radius:var(--r-lg);
-  padding:14px;
-  margin-bottom:10px;
+/* ── Heatmap grid ── */
+#heatmapGrid{
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  padding-bottom:6px;
 }
+#heatmapGrid::-webkit-scrollbar{height:3px}
+.heatmap-table{
+  border-collapse:collapse;
+  font-size:10px;
+  white-space:nowrap;
+  min-width:400px;
+  width:100%;
+}
+.heatmap-table th{
+  padding:5px 8px;color:var(--text3);font-size:9px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.06em;
+  border:none;cursor:default;background:none;
+}
+.heatmap-table th:first-child{text-align:left;min-width:80px}
+.heatmap-table td{
+  padding:5px 8px;text-align:center;cursor:default;
+  border:1px solid var(--bg);border-radius:4px;
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+  transition:opacity 0.2s;
+}
+.heatmap-table td:hover{opacity:0.75}
+
+/* ── Skeleton loaders ── */
 .skel{
-  background:var(--bg3);
-  border-radius:4px;
+  background:var(--bg3);border-radius:4px;
   position:relative;overflow:hidden;
 }
 .skel::after{
-  content:'';
-  position:absolute;inset:0;
+  content:'';position:absolute;inset:0;
   background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.04) 50%,transparent 100%);
   animation:shimmer 1.6s infinite;
 }
 @keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 .skel-h12{height:12px}.skel-h16{height:16px}.skel-h20{height:20px}
-.skel-h160{height:160px}.skel-h180{height:180px}
+.skel-h160{height:160px}.skel-h180{height:180px}.skel-h200{height:200px}
 .mb4{margin-bottom:4px}.mb6{margin-bottom:6px}.mb8{margin-bottom:8px}
 .w30{width:30%}.w45{width:45%}.w60{width:60%}.w75{width:75%}.w90{width:90%}.w100{width:100%}
 
 /* ── Table ── */
 .table-section{padding:16px 16px 0}
+.table-controls{
+  display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;
+}
+.table-section .section-hd{margin-bottom:10px}
+.search-wrap{position:relative;flex:1;min-width:140px}
+.search-wrap input{
+  width:100%;background:var(--bg2);color:var(--text);
+  border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:7px 10px 7px 30px;
+  font-size:12px;font-family:'Geist',system-ui,sans-serif;
+  transition:border-color 0.15s;
+}
+.search-wrap input:focus{outline:none;border-color:var(--accent)}
+.search-wrap input::placeholder{color:var(--text4)}
+.search-icon{
+  position:absolute;left:9px;top:50%;transform:translateY(-50%);
+  color:var(--text4);font-size:13px;pointer-events:none;
+}
+.row-count{
+  font-size:11px;color:var(--text3);white-space:nowrap;
+  font-family:'JetBrains Mono',monospace;
+}
 .table-outer{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--r-lg);border:1px solid var(--border)}
 .table-outer::-webkit-scrollbar{height:3px}
-table{width:100%;border-collapse:collapse;min-width:560px;font-size:12px}
+table{width:100%;border-collapse:collapse;min-width:640px;font-size:12px}
 thead tr{background:var(--bg3)}
 th{
-  padding:9px 12px;
-  text-align:left;
-  font-size:10px;font-weight:600;
-  color:var(--text3);
-  text-transform:uppercase;
-  letter-spacing:0.06em;
-  white-space:nowrap;
-  cursor:pointer;
-  user-select:none;
-  border-bottom:1px solid var(--border);
-  transition:color 0.15s;
+  padding:9px 12px;text-align:left;
+  font-size:10px;font-weight:600;color:var(--text3);
+  text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;
+  cursor:pointer;user-select:none;
+  border-bottom:1px solid var(--border);transition:color 0.15s;
+  background:none;border-radius:0;
 }
 th:hover{color:var(--text2)}
 th.th-sorted{color:var(--accent)}
 .th-arrow{margin-left:3px;font-size:8px;opacity:0.5;transition:opacity 0.15s}
 th.th-sorted .th-arrow{opacity:1}
-tbody tr{
-  cursor:pointer;
-  transition:background 0.1s;
-}
+tbody tr{cursor:pointer;transition:background 0.1s}
 tbody tr:nth-child(even) td{background:rgba(255,255,255,0.012)}
 tbody tr:hover td{background:rgba(16,185,129,0.05)!important}
 tbody tr:active{transform:scale(0.995)}
 td{
-  padding:9px 12px;
-  border-bottom:1px solid rgba(39,39,42,0.7);
-  white-space:nowrap;
-  color:var(--text2);
-  vertical-align:middle;
+  padding:9px 12px;border-bottom:1px solid rgba(39,39,42,0.7);
+  white-space:nowrap;color:var(--text2);vertical-align:middle;
 }
 tbody tr:last-child td{border-bottom:none}
-.td-type{
-  font-size:10px;font-weight:600;
-  color:var(--text3);
-  text-transform:uppercase;
-  letter-spacing:0.04em;
-}
-.td-chip{
-  font-weight:600;color:var(--text);
-  max-width:160px;overflow:hidden;text-overflow:ellipsis;
-}
+.td-type{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em}
+.td-chip{font-weight:600;color:var(--text);max-width:160px;overflow:hidden;text-overflow:ellipsis}
 .td-brand{color:var(--text3);font-size:11px}
-.td-src{
-  font-size:11px;
-  background:var(--bg3);border:1px solid var(--border);
-  border-radius:4px;padding:2px 6px;
-  display:inline-block;
-  color:var(--text2);
-}
+.td-cap{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)}
+.td-src{font-size:11px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 6px;display:inline-block;color:var(--text2)}
 .td-price{font-family:'JetBrains Mono',monospace;font-weight:500;color:var(--text)}
 .td-rub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)}
 .td-stock{font-size:11px}
 .in-stock{color:var(--accent)}
 .no-stock{color:var(--text4)}
 .td-link a{
-  font-size:10px;font-weight:600;
-  color:var(--accent);
-  text-decoration:none;
-  border:1px solid rgba(16,185,129,0.3);
-  border-radius:4px;padding:3px 8px;
-  transition:background 0.15s,border-color 0.15s;
-  display:inline-block;
+  font-size:10px;font-weight:600;color:var(--accent);text-decoration:none;
+  border:1px solid rgba(16,185,129,0.3);border-radius:4px;padding:3px 8px;
+  transition:background 0.15s,border-color 0.15s;display:inline-block;
 }
 .td-link a:hover{background:var(--accent-dim);border-color:var(--accent)}
 td .td-link{padding:6px 12px}
-
-/* Row appear animation */
 @keyframes rowIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 tbody tr{animation:rowIn 0.25s ease both}
-
-/* Load more */
 #loadMoreWrap{padding:16px;text-align:center}
 #btnLoadMore{
-  background:var(--bg2);
-  border:1px solid var(--border);
-  color:var(--text2);
-  border-radius:var(--r);
-  padding:10px 24px;
-  font-size:12px;font-weight:600;
-  font-family:'Geist',system-ui,sans-serif;
-  cursor:pointer;
+  background:var(--bg2);border:1px solid var(--border);
+  color:var(--text2);border-radius:var(--r);
+  padding:10px 24px;font-size:12px;font-weight:600;
+  font-family:'Geist',system-ui,sans-serif;cursor:pointer;
   transition:background 0.15s,border-color 0.15s,color 0.15s;
 }
 #btnLoadMore:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
 #btnLoadMore:active{transform:scale(0.98)}
-
-/* Bottom spacer for Telegram */
 .bottom-space{height:32px}
 
-/* ── Modal overlay ── */
+/* ── Modal ── */
 #overlay{
-  display:none;
-  position:fixed;inset:0;
+  display:none;position:fixed;inset:0;
   background:rgba(0,0,0,0.65);
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px);
-  z-index:100;
-  align-items:flex-end;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  z-index:100;align-items:flex-end;
 }
 #overlay.show{display:flex}
 .modal{
   background:var(--bg2);
-  border:1px solid var(--border2);
-  border-bottom:none;
+  border:1px solid var(--border2);border-bottom:none;
   border-radius:18px 18px 0 0;
-  width:100%;
-  max-height:82vh;
-  overflow-y:auto;
+  width:100%;max-height:82vh;overflow-y:auto;
   box-shadow:0 -16px 48px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.05);
   transform:translateY(100%);
   transition:transform 0.35s cubic-bezier(0.16,1,0.3,1);
@@ -335,18 +354,11 @@ tbody tr{animation:rowIn 0.25s ease both}
 .modal-title{font-size:17px;font-weight:700;letter-spacing:-0.025em;margin-bottom:2px}
 .modal-sub{font-size:11px;color:var(--text3);margin-bottom:14px}
 .modal-chart-wrap{height:200px;margin-bottom:16px}
-.modal-sources-title{
-  font-size:10px;font-weight:600;
-  color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;
-  margin-bottom:8px;
-}
+.modal-sources-title{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px}
 .src-row{
   display:flex;align-items:center;justify-content:space-between;
-  padding:10px 12px;
-  border-radius:var(--r-sm);
-  border:1px solid var(--border);
-  margin-bottom:6px;
-  background:var(--bg);
+  padding:10px 12px;border-radius:var(--r-sm);
+  border:1px solid var(--border);margin-bottom:6px;background:var(--bg);
 }
 .src-row:last-child{margin-bottom:0}
 .src-info{display:flex;flex-direction:column;gap:2px}
@@ -354,30 +366,20 @@ tbody tr{animation:rowIn 0.25s ease both}
 .src-price{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:var(--text);letter-spacing:-0.02em}
 .src-meta{font-size:10px;color:var(--text3)}
 .src-open{
-  font-size:10px;font-weight:700;letter-spacing:0.04em;
-  text-transform:uppercase;
-  color:var(--accent);
-  text-decoration:none;
-  border:1px solid rgba(16,185,129,0.35);
-  border-radius:6px;padding:6px 12px;
-  transition:background 0.15s;
-  flex-shrink:0;
+  font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;
+  color:var(--accent);text-decoration:none;
+  border:1px solid rgba(16,185,129,0.35);border-radius:6px;padding:6px 12px;
+  transition:background 0.15s;flex-shrink:0;
 }
 .src-open:hover{background:var(--accent-dim)}
 .src-open:active{transform:scale(0.96)}
 
 /* ── Empty state ── */
-.empty{
-  padding:48px 16px;text-align:center;
-  color:var(--text3);font-size:13px;
-}
-.empty-icon{font-size:32px;margin-bottom:8px;opacity:0.4}
+.empty{padding:48px 16px;text-align:center;color:var(--text3);font-size:13px}
 
-/* ── Accent pulse on KPI ── */
+/* ── Animations ── */
 @keyframes kpiIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:none}}
 .kpi-val{animation:kpiIn 0.4s ease both}
-
-/* Active states */
 button:active,select:active{transform:scale(0.98)}
 </style>
 </head>
@@ -385,31 +387,56 @@ button:active,select:active{transform:scale(0.98)}
 
 <!-- Top bar -->
 <div id="topbar">
-  <h1>Memory <span>Prices</span></h1>
+  <h1>Memory <span>Prices</span> BI</h1>
   <div class="topbar-right">
     <div id="demoBadge">DEMO</div>
     <div id="updatedBadge">--</div>
   </div>
 </div>
 
-<!-- Filter bar -->
-<div id="filterbar">
-  <div class="sel-wrap">
-    <select id="selType"><option value="">All Types</option></select>
+<!-- Mega filter bar -->
+<div id="megaFilter">
+  <div class="mega-row">
+    <span class="mega-label">Category</span>
+    <button class="toggle-btn" id="btnFlash" onclick="toggleCategory('flash')">Flash Memory</button>
+    <button class="toggle-btn" id="btnRam" onclick="toggleCategory('ram')">RAM</button>
+    <div class="sel-wrap">
+      <select id="selType"><option value="">All Types</option></select>
+    </div>
+    <div class="sel-wrap">
+      <select id="selBrand"><option value="">All Brands</option></select>
+    </div>
   </div>
-  <div class="sel-wrap">
-    <select id="selBrand"><option value="">All Brands</option></select>
-  </div>
-  <div class="sel-wrap">
-    <select id="selSource"><option value="">All Sources</option></select>
-  </div>
-  <div class="sel-wrap">
-    <select id="selSort">
-      <option value="price_asc">Price: Low to High</option>
-      <option value="price_desc">Price: High to Low</option>
-      <option value="name_asc">Name: A-Z</option>
-      <option value="rub_desc">RUB: High to Low</option>
-    </select>
+  <div class="mega-row">
+    <span class="mega-label">Filters</span>
+    <div class="sel-wrap">
+      <select id="selCapacity">
+        <option value="">All Volumes</option>
+        <option value="4GB">4 GB</option>
+        <option value="8GB">8 GB</option>
+        <option value="16GB">16 GB</option>
+        <option value="32GB">32 GB</option>
+        <option value="64GB">64 GB</option>
+        <option value="128GB">128 GB</option>
+        <option value="256GB">256 GB</option>
+        <option value="512GB">512 GB</option>
+        <option value="1TB">1 TB</option>
+        <option value="4Gbit">4 Gbit</option>
+        <option value="8Gbit">8 Gbit</option>
+        <option value="16Gbit">16 Gbit</option>
+      </select>
+    </div>
+    <div class="sel-wrap">
+      <select id="selSource"><option value="">All Sources</option></select>
+    </div>
+    <div class="sel-wrap">
+      <select id="selSort">
+        <option value="price_asc">Price: Low</option>
+        <option value="price_desc">Price: High</option>
+        <option value="name_asc">Name: A-Z</option>
+        <option value="rub_desc">RUB: High</option>
+      </select>
+    </div>
   </div>
 </div>
 
@@ -433,17 +460,34 @@ button:active,select:active{transform:scale(0.98)}
   </div>
 </div>
 
-<!-- Chart row 1: Distribution + Source coverage -->
+<!-- Chart 1: Price Distribution by Type + Chart 2: Source Coverage -->
 <div class="section">
   <div class="chart-row">
+    <!-- Chart 1 -->
     <div class="chart-card">
-      <div class="chart-card-title">Distribution by Type</div>
+      <div class="chart-card-hd">
+        <div class="chart-card-title">Distribution by Type</div>
+        <div class="chart-card-controls">
+          <button class="ctrl-btn active" id="c1Count" onclick="setC1Mode('count')">Count</button>
+          <button class="ctrl-btn" id="c1Price" onclick="setC1Mode('price')">Avg Price</button>
+        </div>
+      </div>
       <div class="chart-wrap chart-h180" id="skChart1">
         <div class="skel skel-h180 w100"></div>
       </div>
     </div>
+    <!-- Chart 2 -->
     <div class="chart-card">
-      <div class="chart-card-title">Source Coverage</div>
+      <div class="chart-card-hd">
+        <div class="chart-card-title">Source Coverage</div>
+        <div class="chart-card-controls">
+          <div class="ctrl-sel-wrap">
+            <select class="ctrl-sel" id="selDrillSource" onchange="renderChartBySource(lastFiltered)">
+              <option value="">All</option>
+            </select>
+          </div>
+        </div>
+      </div>
       <div class="chart-wrap chart-h180" id="skChart2">
         <div class="skel skel-h180 w100"></div>
       </div>
@@ -451,22 +495,38 @@ button:active,select:active{transform:scale(0.98)}
   </div>
 </div>
 
-<!-- Chart: Avg price by type -->
+<!-- Chart 3: Brand Market Share -->
 <div class="section">
   <div class="chart-card">
-    <div class="chart-card-title">Average Price by Type (USD)</div>
-    <div class="chart-wrap chart-h200" id="skChart3">
-      <div class="skel skel-h180 w100"></div>
+    <div class="chart-card-hd">
+      <div class="chart-card-title">Brand Market Share — Top 15</div>
+    </div>
+    <div class="chart-wrap chart-h260" id="skChart3">
+      <div class="skel skel-h200 w100"></div>
     </div>
   </div>
 </div>
 
-<!-- Chart: Price trend -->
+<!-- Chart 4: Price Range Analysis (min/avg/max) -->
 <div class="section">
   <div class="chart-card">
-    <div class="chart-card-title">Price Trend over Time</div>
+    <div class="chart-card-hd">
+      <div class="chart-card-title">Price Range by Type (min / avg / max USD)</div>
+    </div>
     <div class="chart-wrap chart-h220" id="skChart4">
-      <div class="skel skel-h180 w100"></div>
+      <div class="skel skel-h200 w100"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Chart 5: Price Heatmap Type x Source -->
+<div class="section">
+  <div class="chart-card">
+    <div class="chart-card-hd">
+      <div class="chart-card-title">Avg Price Heatmap — Type x Source (USD)</div>
+    </div>
+    <div id="heatmapGrid">
+      <div class="skel skel-h160 w100"></div>
     </div>
   </div>
 </div>
@@ -474,7 +534,14 @@ button:active,select:active{transform:scale(0.98)}
 <!-- Data table -->
 <div class="table-section">
   <div class="section-hd">
-    <div class="section-title" id="tableTitle">All Prices</div>
+    <div class="section-title">Price List</div>
+  </div>
+  <div class="table-controls">
+    <div class="search-wrap">
+      <span class="search-icon">&#128269;</span>
+      <input type="text" id="searchInput" placeholder="Search part number..." oninput="onSearch()">
+    </div>
+    <div class="row-count" id="rowCount">-- of --</div>
   </div>
   <div class="table-outer">
     <table>
@@ -483,6 +550,7 @@ button:active,select:active{transform:scale(0.98)}
           <th data-col="type">Type<span class="th-arrow">&#9650;</span></th>
           <th data-col="chip" class="th-sorted">Chip<span class="th-arrow">&#9650;</span></th>
           <th data-col="brand">Brand<span class="th-arrow">&#9650;</span></th>
+          <th data-col="capacity">Cap<span class="th-arrow">&#9650;</span></th>
           <th data-col="source">Source<span class="th-arrow">&#9650;</span></th>
           <th data-col="price_usd">USD<span class="th-arrow">&#9650;</span></th>
           <th data-col="price_rub">RUB<span class="th-arrow">&#9650;</span></th>
@@ -491,7 +559,7 @@ button:active,select:active{transform:scale(0.98)}
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="8">
+        <tr><td colspan="9">
           <div style="padding:16px">
             <div class="skel skel-h12 w90 mb8"></div>
             <div class="skel skel-h12 w75 mb8"></div>
@@ -506,7 +574,7 @@ button:active,select:active{transform:scale(0.98)}
   </div>
 </div>
 <div id="loadMoreWrap" style="display:none">
-  <button id="btnLoadMore" onclick="loadMore()">Load more</button>
+  <button id="btnLoadMore" onclick="loadMore()">Load 25 more</button>
 </div>
 <div class="bottom-space"></div>
 
@@ -517,9 +585,7 @@ button:active,select:active{transform:scale(0.98)}
     <div class="modal-inner">
       <div class="modal-title" id="mTitle"></div>
       <div class="modal-sub" id="mSub"></div>
-      <div class="modal-chart-wrap">
-        <canvas id="mChart"></canvas>
-      </div>
+      <div class="modal-chart-wrap"><canvas id="mChart"></canvas></div>
       <div class="modal-sources-title">Price by Source</div>
       <div id="mSources"></div>
     </div>
@@ -530,77 +596,99 @@ button:active,select:active{transform:scale(0.98)}
 /* ─────────────────────────────────────────
    CONFIG
 ───────────────────────────────────────── */
-const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ? 'http://localhost:8000/api/'
-  : (window.location.origin + '/api/');
-
-const PALETTE = ['#10b981','#3b82f6','#f59e0b','#ef4444','#06b6d4','#84cc16','#f97316','#a78bfa'];
+const API_URL = '';
+const PALETTE = ['#10b981','#3b82f6','#f59e0b','#ef4444','#06b6d4','#84cc16','#f97316','#a78bfa','#ec4899','#14b8a6'];
 const CHART_ANIM = {duration:800,easing:'easeOutQuart'};
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 25;
+
+const FLASH_TYPES = ['eMMC','UFS','NAND Flash','NOR Flash','NAND','NOR'];
+const RAM_TYPES = ['DDR3','DDR4','DDR5','LPDDR4','LPDDR4X','LPDDR5','SRAM','SDRAM','DRAM'];
 
 /* ─────────────────────────────────────────
    TELEGRAM INIT
 ───────────────────────────────────────── */
 const tg = window.Telegram?.WebApp;
 if (tg) {
-  tg.ready();
-  tg.expand();
-  try { tg.setHeaderColor('#09090b'); } catch(e) {}
-  try { tg.setBackgroundColor('#09090b'); } catch(e) {}
+  tg.ready();tg.expand();
+  try{tg.setHeaderColor('#09090b')}catch(e){}
+  try{tg.setBackgroundColor('#09090b')}catch(e){}
   if (tg.BackButton) tg.BackButton.onClick(closeModal);
 }
 
 /* ─────────────────────────────────────────
-   MOCK DATA
+   MOCK DATA (200+ realistic entries)
 ───────────────────────────────────────── */
 function buildMockData() {
-  const types = ['eMMC','DDR4','DDR5','NAND Flash','NOR Flash','LPDDR4X'];
-  const brands = ['Samsung','Micron','SK Hynix','Kioxia','Winbond'];
-  const sources = ['findchips','szlcsc','jlcpcb','memorymarket','chipdip','ebay'];
-  const capacities = ['1GB','2GB','4GB','8GB','16GB','32GB','64GB','128MB','256MB','512MB'];
+  const flashTypes = [
+    {t:'eMMC', bases:[2.5,4,7,12,22], caps:['4GB','8GB','16GB','32GB','64GB']},
+    {t:'UFS',  bases:[3.5,6,10,18,30], caps:['8GB','16GB','32GB','64GB','128GB']},
+    {t:'NAND Flash', bases:[0.8,1.5,2.8,5,9], caps:['4Gbit','8Gbit','16Gbit','64GB','128GB']},
+    {t:'NOR Flash',  bases:[0.4,0.9,1.8,3.5,6], caps:['4Gbit','8Gbit','16Gbit','32GB','64GB']},
+  ];
+  const ramTypes = [
+    {t:'DDR4',   bases:[4,7,12,22,40], caps:['4GB','8GB','16GB','32GB','64GB']},
+    {t:'DDR5',   bases:[8,14,24,45,80], caps:['8GB','16GB','32GB','64GB','128GB']},
+    {t:'DDR3',   bases:[2.5,4.5,8,15,28], caps:['4GB','8GB','16GB','32GB']},
+    {t:'LPDDR4', bases:[5,9,16,28,50], caps:['4GB','8GB','16GB','32GB','64GB']},
+    {t:'LPDDR4X',bases:[6,11,19,33,58], caps:['4GB','8GB','16GB','32GB','64GB']},
+    {t:'LPDDR5', bases:[9,16,28,50,90], caps:['8GB','16GB','32GB','64GB','128GB']},
+    {t:'SRAM',   bases:[1.2,2.5,5,9,18], caps:['4Gbit','8Gbit','16Gbit']},
+    {t:'SDRAM',  bases:[2,3.5,6,11,20], caps:['4GB','8GB','16GB','32GB']},
+  ];
+
+  const brands = [
+    {n:'Samsung',  pfx:'K'},
+    {n:'Micron',   pfx:'MT'},
+    {n:'SK Hynix', pfx:'HY'},
+    {n:'Kioxia',   pfx:'KX'},
+    {n:'Winbond',  pfx:'W'},
+    {n:'GigaDevice',pfx:'GD'},
+    {n:'Macronix', pfx:'MX'},
+    {n:'ISSI',     pfx:'IS'},
+    {n:'Nanya',    pfx:'NT'},
+  ];
+  const sources = ['findchips','szlcsc','jlcpcb','memorymarket','chipdip','mouser'];
   const descMap = {
-    'eMMC':'Embedded MultiMediaCard flash storage',
+    'eMMC':'Embedded MultiMediaCard flash',
+    'UFS':'Universal Flash Storage',
+    'NAND Flash':'NAND architecture flash',
+    'NOR Flash':'NOR architecture flash',
     'DDR4':'Double Data Rate 4 SDRAM',
     'DDR5':'Double Data Rate 5 SDRAM',
-    'NAND Flash':'NAND architecture flash memory',
-    'NOR Flash':'NOR architecture flash memory',
-    'LPDDR4X':'Low Power Double Data Rate 4X'
+    'DDR3':'Double Data Rate 3 SDRAM',
+    'LPDDR4':'Low Power DDR4',
+    'LPDDR4X':'Low Power DDR4X',
+    'LPDDR5':'Low Power DDR5',
+    'SRAM':'Static RAM',
+    'SDRAM':'Synchronous DRAM',
   };
 
-  const priceBase = {'eMMC':3,'DDR4':8,'DDR5':18,'NAND Flash':1.5,'NOR Flash':0.8,'LPDDR4X':12};
-  const chips = [];
-
-  types.forEach(type => {
-    brands.forEach(brand => {
-      capacities.slice(0,4).forEach(cap => {
-        const suffix = Math.random().toString(36).slice(2,6).toUpperCase();
-        const pn = `${brand.slice(0,3).toUpperCase()}-${type.replace(/\s/g,'').slice(0,4)}-${cap}-${suffix}`;
-        chips.push({pn, type, brand, cap, desc: descMap[type]});
-      });
-    });
-  });
-
   const entries = [];
-  chips.forEach(chip => {
-    const numSources = 1 + Math.floor(Math.random() * 3);
-    const srcSubset = [...sources].sort(() => Math.random()-0.5).slice(0, numSources);
-    srcSubset.forEach(src => {
-      const base = priceBase[chip.type] * (chip.cap.includes('GB') ? parseInt(chip.cap) : parseInt(chip.cap) / 1000);
-      const price_usd = Math.max(0.5, +(base * (0.7 + Math.random() * 0.8)).toFixed(2));
-      const price_rub = +(price_usd * (88 + Math.random()*8)).toFixed(0);
-      const stock = Math.random() > 0.35 ? Math.floor(Math.random() * 9500 + 50) : 0;
-      entries.push({
-        id: entries.length,
-        type: chip.type,
-        chip: chip.pn,
-        brand: chip.brand,
-        capacity: chip.cap,
-        description: chip.desc,
-        source: src,
-        price_usd,
-        price_rub,
-        stock,
-        link: `https://example.com/search?q=${encodeURIComponent(chip.pn)}&src=${src}`
+  let id = 0;
+  const allTypes = [...flashTypes,...ramTypes];
+
+  allTypes.forEach(({t,bases,caps}) => {
+    brands.forEach(brand => {
+      caps.forEach((cap, ci) => {
+        const base = bases[ci] ?? bases[bases.length-1];
+        const suffix = Math.random().toString(36).slice(2,7).toUpperCase();
+        const capCode = cap.replace(/[^0-9]/g,'');
+        const pn = `${brand.pfx}${capCode}${t.replace(/\s/g,'').slice(0,3).toUpperCase()}-${suffix}`;
+        const numSrcs = 1 + Math.floor(Math.random()*4);
+        const srcSubset = [...sources].sort(()=>Math.random()-0.5).slice(0,numSrcs);
+        srcSubset.forEach(src => {
+          const mult = 0.72 + Math.random()*0.72;
+          const price_usd = Math.max(0.3, +(base * mult).toFixed(2));
+          const price_rub = +(price_usd*(88+Math.random()*10)).toFixed(0);
+          const stock = Math.random()>0.3 ? Math.floor(Math.random()*9000+50) : 0;
+          entries.push({
+            id: id++,
+            type:t,chip:pn,brand:brand.n,capacity:cap,
+            description:descMap[t]??t,
+            source:src,price_usd,price_rub,stock,
+            link:`https://example.com/q=${encodeURIComponent(pn)}&s=${src}`
+          });
+        });
       });
     });
   });
@@ -609,33 +697,32 @@ function buildMockData() {
 }
 
 function buildMockHistory(prices) {
-  const hist = {};
-  const types = [...new Set(prices.map(p => p.type))];
+  const types = [...new Set(prices.map(p=>p.type))];
   const today = new Date();
-  const dates = Array.from({length:30}, (_,i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - (29-i));
+  const dates = Array.from({length:30},(_,i)=>{
+    const d=new Date(today); d.setDate(d.getDate()-(29-i));
     return d.toISOString().slice(0,10);
   });
-
-  types.forEach(type => {
-    const base = {eMMC:4,DDR4:10,DDR5:20,'NAND Flash':2,'NOR Flash':1,LPDDR4X:15}[type] || 5;
-    hist[type] = dates.map((date,i) => {
-      const trend = Math.sin(i/5) * 0.8;
-      const noise = (Math.random()-0.5)*1.2;
-      return {date, avg: Math.max(0.5, +(base + trend + noise).toFixed(2))};
-    });
+  const baseMap = {'eMMC':4,'UFS':8,'NAND Flash':2,'NOR Flash':1,
+    'DDR4':10,'DDR5':22,'DDR3':5,'LPDDR4':12,'LPDDR4X':15,'LPDDR5':24,'SRAM':3,'SDRAM':6};
+  const hist = {};
+  types.forEach(type=>{
+    const base = baseMap[type]??5;
+    hist[type]=dates.map((date,i)=>({
+      date,
+      avg:Math.max(0.3,+(base+Math.sin(i/5)*0.7+(Math.random()-0.5)*1.1).toFixed(2))
+    }));
   });
-  return {types, dates, hist};
+  return {types,dates,hist};
 }
 
 function buildMockStats(prices) {
   return {
-    total: prices.length,
-    types: [...new Set(prices.map(p=>p.type))].length,
-    brands: [...new Set(prices.map(p=>p.brand))].length,
-    sources: [...new Set(prices.map(p=>p.source))].length,
-    updated: new Date().toISOString()
+    total:prices.length,
+    types:[...new Set(prices.map(p=>p.type))].length,
+    brands:[...new Set(prices.map(p=>p.brand))].length,
+    sources:[...new Set(prices.map(p=>p.source))].length,
+    updated:new Date().toISOString()
   };
 }
 
@@ -649,7 +736,11 @@ let sortAsc = true;
 let page = 0;
 let filteredData = [];
 let demoMode = false;
-
+let lastFiltered = [];
+let c1Mode = 'count';
+let activeFlash = false;
+let activeRam = false;
+let searchQuery = '';
 let charts = {};
 let detailChart = null;
 
@@ -660,28 +751,38 @@ Chart.defaults.color = '#71717a';
 Chart.defaults.borderColor = '#27272a';
 Chart.defaults.font.family = "'Geist', system-ui, sans-serif";
 
-const TOOLTIP_DEFAULTS = {
-  backgroundColor:'#18181b',
-  borderColor:'#3f3f46',
-  borderWidth:1,
-  titleColor:'#fafafa',
-  bodyColor:'#a1a1aa',
-  padding:10,
-  cornerRadius:8,
+const TOOLTIP_DEF = {
+  backgroundColor:'#18181b',borderColor:'#3f3f46',borderWidth:1,
+  titleColor:'#fafafa',bodyColor:'#a1a1aa',padding:10,cornerRadius:8,
   titleFont:{family:"'JetBrains Mono',monospace",size:12},
   bodyFont:{family:"'JetBrains Mono',monospace",size:11},
   callbacks:{}
 };
 
-function makeGradient(ctx, color, alpha1=0.3, alpha2=0) {
-  const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.clientHeight || 200);
-  gradient.addColorStop(0, color + Math.round(alpha1*255).toString(16).padStart(2,'0'));
-  gradient.addColorStop(1, color + Math.round(alpha2*255).toString(16).padStart(2,'0'));
-  return gradient;
+function destroyChart(key){if(charts[key]){charts[key].destroy();charts[key]=null;}}
+
+/* ─────────────────────────────────────────
+   CATEGORY TOGGLE (Flash / RAM)
+───────────────────────────────────────── */
+function toggleCategory(cat) {
+  if (cat==='flash') activeFlash=!activeFlash;
+  else activeRam=!activeRam;
+  document.getElementById('btnFlash').className='toggle-btn'+(activeFlash?' active-flash':'');
+  document.getElementById('btnRam').className='toggle-btn'+(activeRam?' active-ram':'');
+  page=0; searchQuery=''; document.getElementById('searchInput').value='';
+  refresh();
 }
 
-function destroyChart(key) {
-  if (charts[key]) { charts[key].destroy(); charts[key] = null; }
+function categoryFilter(data) {
+  if (!activeFlash && !activeRam) return data;
+  return data.filter(r=>{
+    const isFlash = FLASH_TYPES.some(ft=>r.type.toLowerCase().includes(ft.toLowerCase())||ft.toLowerCase().includes(r.type.toLowerCase()));
+    const isRam   = RAM_TYPES.some(rt=>r.type.toLowerCase()===rt.toLowerCase());
+    if (activeFlash && activeRam) return isFlash||isRam;
+    if (activeFlash) return isFlash;
+    if (activeRam)   return isRam;
+    return true;
+  });
 }
 
 /* ─────────────────────────────────────────
@@ -689,440 +790,412 @@ function destroyChart(key) {
 ───────────────────────────────────────── */
 function getFilters() {
   return {
-    type: document.getElementById('selType').value,
-    brand: document.getElementById('selBrand').value,
-    source: document.getElementById('selSource').value,
-    sort: document.getElementById('selSort').value,
+    type:     document.getElementById('selType').value,
+    brand:    document.getElementById('selBrand').value,
+    source:   document.getElementById('selSource').value,
+    capacity: document.getElementById('selCapacity').value,
+    sort:     document.getElementById('selSort').value,
   };
 }
 
 function applyFilters(data) {
   const f = getFilters();
-  let d = data;
-  if (f.type) d = d.filter(r => r.type === f.type);
-  if (f.brand) d = d.filter(r => r.brand === f.brand);
-  if (f.source) d = d.filter(r => r.source === f.source);
+  let d = categoryFilter(data);
+  if (f.type)     d = d.filter(r=>r.type===f.type);
+  if (f.brand)    d = d.filter(r=>r.brand===f.brand);
+  if (f.source)   d = d.filter(r=>r.source===f.source);
+  if (f.capacity) d = d.filter(r=>r.capacity===f.capacity);
   return applySortState(d);
 }
 
+function applySearch(data) {
+  if (!searchQuery) return data;
+  const q = searchQuery.toLowerCase();
+  return data.filter(r=>r.chip.toLowerCase().includes(q));
+}
+
 function applySortState(d) {
-  const dir = sortAsc ? 1 : -1;
-  return [...d].sort((a, b) => {
-    let va = a[sortCol] ?? '';
-    let vb = b[sortCol] ?? '';
-    if (typeof va === 'number') return (va - vb) * dir;
-    return va.toString().localeCompare(vb.toString()) * dir;
+  const dir = sortAsc?1:-1;
+  return [...d].sort((a,b)=>{
+    let va=a[sortCol]??'', vb=b[sortCol]??'';
+    if (typeof va==='number') return (va-vb)*dir;
+    return va.toString().localeCompare(vb.toString())*dir;
   });
 }
 
 function populateSelectors(data) {
-  const types = [...new Set(data.map(r=>r.type))].sort();
-  const brands = [...new Set(data.map(r=>r.brand))].sort();
+  const types   = [...new Set(data.map(r=>r.type))].sort();
+  const brands  = [...new Set(data.map(r=>r.brand))].sort();
   const sources = [...new Set(data.map(r=>r.source))].sort();
 
-  const selT = document.getElementById('selType');
-  const selB = document.getElementById('selBrand');
-  const selS = document.getElementById('selSource');
+  const selT=document.getElementById('selType');
+  const selB=document.getElementById('selBrand');
+  const selS=document.getElementById('selSource');
+  const selD=document.getElementById('selDrillSource');
 
-  const saved = {t:selT.value, b:selB.value, s:selS.value};
+  const sv={t:selT.value,b:selB.value,s:selS.value};
 
-  selT.innerHTML = '<option value="">All Types</option>' + types.map(t=>`<option value="${t}">${t}</option>`).join('');
-  selB.innerHTML = '<option value="">All Brands</option>' + brands.map(b=>`<option value="${b}">${b}</option>`).join('');
-  selS.innerHTML = '<option value="">All Sources</option>' + sources.map(s=>`<option value="${s}">${s}</option>`).join('');
+  selT.innerHTML='<option value="">All Types</option>'+types.map(t=>`<option value="${t}">${t}</option>`).join('');
+  selB.innerHTML='<option value="">All Brands</option>'+brands.map(b=>`<option value="${b}">${b}</option>`).join('');
+  selS.innerHTML='<option value="">All Sources</option>'+sources.map(s=>`<option value="${s}">${s}</option>`).join('');
+  selD.innerHTML='<option value="">All</option>'+sources.map(s=>`<option value="${s}">${s}</option>`).join('');
 
-  selT.value = saved.t;
-  selB.value = saved.b;
-  selS.value = saved.s;
+  selT.value=sv.t; selB.value=sv.b; selS.value=sv.s;
 }
 
 /* ─────────────────────────────────────────
    KPIs
 ───────────────────────────────────────── */
 function renderKPIs(data) {
-  const types = new Set(data.map(r=>r.type));
-  const brands = new Set(data.map(r=>r.brand));
-  const sources = new Set(data.map(r=>r.source));
-  animCount('kpiTotal', data.length);
-  animCount('kpiTypes', types.size);
-  animCount('kpiBrands', brands.size);
-  animCount('kpiSources', sources.size);
+  animCount('kpiTotal',data.length);
+  animCount('kpiTypes',[...new Set(data.map(r=>r.type))].size);
+  animCount('kpiBrands',[...new Set(data.map(r=>r.brand))].size);
+  animCount('kpiSources',[...new Set(data.map(r=>r.source))].size);
 }
 
-function animCount(id, target) {
-  const el = document.getElementById(id);
-  const start = parseInt(el.textContent) || 0;
-  const dur = 600;
-  const t0 = performance.now();
-  function tick(now) {
-    const p = Math.min(1, (now-t0)/dur);
-    const ease = 1 - Math.pow(1-p, 3);
-    el.textContent = Math.round(start + (target-start)*ease);
-    if (p < 1) requestAnimationFrame(tick);
+function animCount(id,target) {
+  const el=document.getElementById(id);
+  const start=parseInt(el.textContent)||0;
+  const dur=600,t0=performance.now();
+  function tick(now){
+    const p=Math.min(1,(now-t0)/dur);
+    const ease=1-Math.pow(1-p,3);
+    el.textContent=Math.round(start+(target-start)*ease);
+    if(p<1)requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
 }
 
 /* ─────────────────────────────────────────
-   CHART 1: Distribution by Type (horizontal bar)
+   CHART 1: Distribution by Type
 ───────────────────────────────────────── */
-function renderChartByType(data) {
-  const wrap = document.getElementById('skChart1');
-  wrap.innerHTML = '<canvas id="chartByType"></canvas>';
-  wrap.firstChild.style.cssText = 'width:100%;height:180px';
+function setC1Mode(mode) {
+  c1Mode=mode;
+  document.getElementById('c1Count').className='ctrl-btn'+(mode==='count'?' active':'');
+  document.getElementById('c1Price').className='ctrl-btn'+(mode==='price'?' active':'');
+  renderChartByType(lastFiltered);
+}
 
-  const counts = {};
-  data.forEach(r => { counts[r.type] = (counts[r.type]||0)+1; });
-  const labels = Object.keys(counts).sort((a,b) => counts[b]-counts[a]);
-  const vals = labels.map(k => counts[k]);
+function renderChartByType(data) {
+  const wrap=document.getElementById('skChart1');
+  wrap.innerHTML='<canvas id="chartByType"></canvas>';
+  wrap.firstChild.style.cssText='width:100%;height:180px';
+
+  const map={};
+  data.forEach(r=>{
+    if(!map[r.type])map[r.type]={count:0,sum:0};
+    map[r.type].count++;
+    map[r.type].sum+=r.price_usd;
+  });
+  const labels=Object.keys(map).sort((a,b)=>map[b].count-map[a].count);
+  const vals = c1Mode==='count'
+    ? labels.map(k=>map[k].count)
+    : labels.map(k=>+(map[k].sum/map[k].count).toFixed(2));
 
   destroyChart('type');
-  const ctx = document.getElementById('chartByType').getContext('2d');
-
-  charts['type'] = new Chart(ctx, {
-    type: 'bar',
-    data: {
+  const ctx=document.getElementById('chartByType').getContext('2d');
+  charts['type']=new Chart(ctx,{
+    type:'bar',
+    data:{
       labels,
-      datasets: [{
-        data: vals,
-        backgroundColor: labels.map((_,i) => PALETTE[i%8] + '33'),
-        borderColor: labels.map((_,i) => PALETTE[i%8]),
-        borderWidth: 1.5,
-        borderRadius: 5,
-        borderSkipped: false,
-        hoverBackgroundColor: labels.map((_,i) => PALETTE[i%8] + '55'),
+      datasets:[{
+        data:vals,
+        backgroundColor:labels.map((_,i)=>PALETTE[i%10]+'33'),
+        borderColor:labels.map((_,i)=>PALETTE[i%10]),
+        borderWidth:1.5,borderRadius:5,borderSkipped:false,
+        hoverBackgroundColor:labels.map((_,i)=>PALETTE[i%10]+'55'),
       }]
     },
-    options: {
-      indexAxis: 'y',
-      animation: CHART_ANIM,
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {display:false},
-        tooltip: {
-          ...TOOLTIP_DEFAULTS,
-          callbacks: {
-            title: items => items[0].label,
-            label: item => ` ${item.raw} entries`,
-          }
-        }
+    options:{
+      indexAxis:'y',animation:CHART_ANIM,responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{...TOOLTIP_DEF,callbacks:{
+          title:items=>items[0].label,
+          label:item=>c1Mode==='count'?` ${item.raw} entries`:` $${item.raw.toFixed(2)} avg`,
+        }}
       },
-      scales: {
-        x: {
-          grid: {color:'rgba(39,39,42,0.8)'},
-          ticks: {color:'#52525b', font:{size:10, family:"'JetBrains Mono',monospace"}},
-          border: {display:false}
-        },
-        y: {
-          grid: {display:false},
-          ticks: {color:'#a1a1aa', font:{size:11}},
-          border: {display:false}
-        }
+      scales:{
+        x:{grid:{color:'rgba(39,39,42,0.8)'},ticks:{color:'#52525b',font:{size:10,family:"'JetBrains Mono',monospace"}},border:{display:false}},
+        y:{grid:{display:false},ticks:{color:'#a1a1aa',font:{size:11}},border:{display:false}}
       }
     }
   });
 }
 
 /* ─────────────────────────────────────────
-   CHART 2: Source coverage (doughnut)
+   CHART 2: Source Coverage (doughnut + drill)
 ───────────────────────────────────────── */
 function renderChartBySource(data) {
-  const wrap = document.getElementById('skChart2');
-  wrap.innerHTML = '<canvas id="chartBySource"></canvas>';
-  wrap.firstChild.style.cssText = 'width:100%;height:180px';
+  const drill=document.getElementById('selDrillSource').value;
+  let d=data;
+  if(drill) d=data.filter(r=>r.source===drill);
 
-  const counts = {};
-  data.forEach(r => { counts[r.source] = (counts[r.source]||0)+1; });
-  const labels = Object.keys(counts).sort((a,b) => counts[b]-counts[a]);
-  const vals = labels.map(k => counts[k]);
+  const wrap=document.getElementById('skChart2');
+  wrap.innerHTML='<canvas id="chartBySource"></canvas>';
+  wrap.firstChild.style.cssText='width:100%;height:180px';
+
+  const counts={};
+  d.forEach(r=>{counts[r.source]=(counts[r.source]||0)+1;});
+  const labels=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  const vals=labels.map(k=>counts[k]);
 
   destroyChart('source');
-  const ctx = document.getElementById('chartBySource').getContext('2d');
-
-  charts['source'] = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
+  const ctx=document.getElementById('chartBySource').getContext('2d');
+  charts['source']=new Chart(ctx,{
+    type:'doughnut',
+    data:{
       labels,
-      datasets: [{
-        data: vals,
-        backgroundColor: labels.map((_,i) => PALETTE[i%8] + 'bb'),
-        borderColor: '#18181b',
-        borderWidth: 2,
-        hoverBorderColor: '#09090b',
-        hoverOffset: 4,
+      datasets:[{
+        data:vals,
+        backgroundColor:labels.map((_,i)=>PALETTE[i%10]+'bb'),
+        borderColor:'#18181b',borderWidth:2,
+        hoverBorderColor:'#09090b',hoverOffset:4,
       }]
     },
-    options: {
-      animation: CHART_ANIM,
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: '70%',
-      plugins: {
-        legend: {
-          position: 'right',
-          labels: {
-            color: '#a1a1aa',
-            font: {size:10},
-            boxWidth: 8,
-            boxHeight: 8,
-            borderRadius: 2,
-            padding: 8,
-          }
-        },
-        tooltip: {
-          ...TOOLTIP_DEFAULTS,
-          callbacks: {
-            label: item => ` ${item.label}: ${item.raw}`,
-          }
-        }
+    options:{
+      animation:CHART_ANIM,responsive:true,maintainAspectRatio:false,cutout:'70%',
+      plugins:{
+        legend:{position:'right',labels:{color:'#a1a1aa',font:{size:10},boxWidth:8,boxHeight:8,borderRadius:2,padding:8}},
+        tooltip:{...TOOLTIP_DEF,callbacks:{label:item=>` ${item.label}: ${item.raw}`}}
       }
     }
   });
 }
 
 /* ─────────────────────────────────────────
-   CHART 3: Avg price by type (vertical bar with gradient + labels)
+   CHART 3: Brand Market Share (top 15)
 ───────────────────────────────────────── */
-function renderChartAvg(data) {
-  const wrap = document.getElementById('skChart3');
-  wrap.innerHTML = '<canvas id="chartAvg"></canvas>';
-  wrap.firstChild.style.cssText = 'width:100%;height:200px';
+function renderChartBrands(data) {
+  const wrap=document.getElementById('skChart3');
+  wrap.innerHTML='<canvas id="chartBrands"></canvas>';
+  wrap.firstChild.style.cssText='width:100%;height:260px';
 
-  const sumMap = {}, cntMap = {};
-  data.forEach(r => {
-    if (r.price_usd > 0) {
-      sumMap[r.type] = (sumMap[r.type]||0) + r.price_usd;
-      cntMap[r.type] = (cntMap[r.type]||0) + 1;
-    }
-  });
-  const labels = Object.keys(sumMap).sort();
-  const vals = labels.map(k => +(sumMap[k]/cntMap[k]).toFixed(2));
+  const counts={};
+  data.forEach(r=>{counts[r.brand]=(counts[r.brand]||0)+1;});
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  const labels=sorted.map(e=>e[0]);
+  const vals=sorted.map(e=>e[1]);
+  const total=vals.reduce((a,b)=>a+b,0);
 
-  destroyChart('avg');
-  const ctx = document.getElementById('chartAvg').getContext('2d');
-  const grad = makeGradient(ctx, '#10b981', 0.5, 0.05);
-
-  charts['avg'] = new Chart(ctx, {
-    type: 'bar',
-    data: {
+  destroyChart('brands');
+  const ctx=document.getElementById('chartBrands').getContext('2d');
+  charts['brands']=new Chart(ctx,{
+    type:'bar',
+    data:{
       labels,
-      datasets: [{
-        label: 'Avg USD',
-        data: vals,
-        backgroundColor: grad,
-        borderColor: '#10b981',
-        borderWidth: 1.5,
-        borderRadius: 6,
-        borderSkipped: false,
-        hoverBackgroundColor: '#10b98166',
+      datasets:[{
+        data:vals,
+        backgroundColor:labels.map((_,i)=>PALETTE[i%10]+'44'),
+        borderColor:labels.map((_,i)=>PALETTE[i%10]),
+        borderWidth:1.5,borderRadius:5,borderSkipped:false,
+        hoverBackgroundColor:labels.map((_,i)=>PALETTE[i%10]+'66'),
       }]
     },
-    options: {
-      animation: CHART_ANIM,
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {display:false},
-        tooltip: {
-          ...TOOLTIP_DEFAULTS,
-          callbacks: {
-            label: item => ` $${item.raw.toFixed(2)}`,
-          }
-        },
-        datalabels: {display:false}
+    options:{
+      indexAxis:'y',animation:CHART_ANIM,responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{...TOOLTIP_DEF,callbacks:{
+          title:items=>items[0].label,
+          label:item=>` ${item.raw} listings (${(item.raw/total*100).toFixed(1)}%)`,
+        }}
       },
-      scales: {
-        x: {
-          grid: {display:false},
-          ticks: {color:'#a1a1aa', font:{size:10}},
-          border: {display:false}
-        },
-        y: {
-          grid: {color:'rgba(39,39,42,0.8)'},
-          ticks: {
-            color:'#52525b',
-            font:{size:10, family:"'JetBrains Mono',monospace"},
-            callback: v => '$'+v
-          },
-          border: {display:false}
-        }
+      scales:{
+        x:{grid:{color:'rgba(39,39,42,0.8)'},ticks:{color:'#52525b',font:{size:10,family:"'JetBrains Mono',monospace"}},border:{display:false}},
+        y:{grid:{display:false},ticks:{color:'#a1a1aa',font:{size:11}},border:{display:false}}
       }
-    },
-    plugins: [{
-      id: 'valueLabels',
-      afterDatasetsDraw(chart) {
-        const {ctx, data} = chart;
-        ctx.save();
-        ctx.font = "500 10px 'JetBrains Mono', monospace";
-        ctx.fillStyle = '#a1a1aa';
-        ctx.textAlign = 'center';
-        chart.getDatasetMeta(0).data.forEach((bar, i) => {
-          const val = data.datasets[0].data[i];
-          ctx.fillText('$'+val.toFixed(2), bar.x, bar.y - 5);
-        });
-        ctx.restore();
-      }
-    }]
+    }
   });
 }
 
 /* ─────────────────────────────────────────
-   CHART 4: Price trend (multi-line with gradient area)
+   CHART 4: Price Range Analysis (stacked bar simulating box plot)
 ───────────────────────────────────────── */
-function renderChartTrend(histData) {
-  const wrap = document.getElementById('skChart4');
-  wrap.innerHTML = '<canvas id="chartTrend"></canvas>';
-  wrap.firstChild.style.cssText = 'width:100%;height:220px';
+function renderChartPriceRange(data) {
+  const wrap=document.getElementById('skChart4');
+  wrap.innerHTML='<canvas id="chartRange"></canvas>';
+  wrap.firstChild.style.cssText='width:100%;height:220px';
 
-  if (!histData) {
-    wrap.innerHTML = '<div style="height:220px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px">No history data</div>';
+  const map={};
+  data.forEach(r=>{
+    if(r.price_usd<=0)return;
+    if(!map[r.type])map[r.type]=[];
+    map[r.type].push(r.price_usd);
+  });
+  const labels=Object.keys(map).filter(k=>map[k].length>0).sort();
+  const mins=labels.map(k=>Math.min(...map[k]));
+  const maxs=labels.map(k=>Math.max(...map[k]));
+  const avgs=labels.map(k=>+(map[k].reduce((a,b)=>a+b,0)/map[k].length).toFixed(2));
+  const spreads=labels.map((_,i)=>+(maxs[i]-mins[i]).toFixed(2));
+
+  destroyChart('range');
+  const ctx=document.getElementById('chartRange').getContext('2d');
+  charts['range']=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'Min',data:mins,backgroundColor:'rgba(16,185,129,0.15)',borderColor:'#10b981',borderWidth:1,borderRadius:0,borderSkipped:false,stack:'s'},
+        {label:'Spread',data:spreads,backgroundColor:'rgba(59,130,246,0.2)',borderColor:'#3b82f6',borderWidth:1,borderRadius:5,borderSkipped:false,stack:'s'},
+      ]
+    },
+    options:{
+      animation:CHART_ANIM,responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{color:'#a1a1aa',font:{size:10},boxWidth:8,boxHeight:8,padding:10}},
+        tooltip:{
+          ...TOOLTIP_DEF,
+          callbacks:{
+            title:items=>items[0].label,
+            label:item=>{
+              if(item.datasetIndex===0)return ` Min: $${mins[item.dataIndex].toFixed(2)}`;
+              return ` Max: $${maxs[item.dataIndex].toFixed(2)}  Avg: $${avgs[item.dataIndex].toFixed(2)}`;
+            }
+          }
+        }
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#a1a1aa',font:{size:10}},border:{display:false},stacked:true},
+        y:{grid:{color:'rgba(39,39,42,0.8)'},ticks:{color:'#52525b',font:{size:10,family:"'JetBrains Mono',monospace"},callback:v=>'$'+v},border:{display:false},stacked:true}
+      }
+    }
+  });
+}
+
+/* ─────────────────────────────────────────
+   CHART 5: Price Heatmap Type x Source
+───────────────────────────────────────── */
+function renderHeatmap(data) {
+  const grid=document.getElementById('heatmapGrid');
+
+  const types  = [...new Set(data.map(r=>r.type))].sort();
+  const sources= [...new Set(data.map(r=>r.source))].sort();
+
+  if(!types.length||!sources.length){
+    grid.innerHTML='<div style="height:80px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px">Not enough data</div>';
     return;
   }
 
-  const {types, dates, hist} = histData;
-  const displayTypes = types.slice(0, 5);
-
-  destroyChart('trend');
-  const ctx = document.getElementById('chartTrend').getContext('2d');
-
-  const datasets = displayTypes.map((type, i) => {
-    const color = PALETTE[i%8];
-    const grad = ctx.createLinearGradient(0,0,0,220);
-    grad.addColorStop(0, color+'44');
-    grad.addColorStop(1, color+'05');
-
-    return {
-      label: type,
-      data: (hist[type]||[]).map(d => d.avg),
-      borderColor: color,
-      backgroundColor: grad,
-      borderWidth: 1.5,
-      fill: true,
-      tension: 0.4,
-      pointRadius: 0,
-      pointHoverRadius: 8,
-      pointHoverBackgroundColor: color,
-      pointHoverBorderColor: '#09090b',
-      pointHoverBorderWidth: 2,
-    };
+  const avgMap={};
+  data.forEach(r=>{
+    const k=r.type+'|'+r.source;
+    if(!avgMap[k])avgMap[k]={sum:0,cnt:0};
+    avgMap[k].sum+=r.price_usd; avgMap[k].cnt++;
   });
 
-  charts['trend'] = new Chart(ctx, {
-    type: 'line',
-    data: {labels: dates, datasets},
-    options: {
-      animation: CHART_ANIM,
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: {intersect:false, mode:'index'},
-      plugins: {
-        legend: {
-          labels: {
-            color:'#a1a1aa',
-            font:{size:10},
-            boxWidth:8,boxHeight:8,
-            borderRadius:2,padding:10,
-          }
-        },
-        tooltip: {
-          ...TOOLTIP_DEFAULTS,
-          callbacks: {
-            label: item => ` ${item.dataset.label}: $${item.raw.toFixed(2)}`,
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: {color:'rgba(39,39,42,0.6)'},
-          ticks: {
-            color:'#52525b',
-            font:{size:9, family:"'JetBrains Mono',monospace"},
-            maxTicksLimit:8,
-            maxRotation:0
-          },
-          border: {display:false}
-        },
-        y: {
-          grid: {color:'rgba(39,39,42,0.6)'},
-          ticks: {
-            color:'#52525b',
-            font:{size:9, family:"'JetBrains Mono',monospace"},
-            callback: v => '$'+v
-          },
-          border: {display:false}
-        }
+  // Compute min and max for color scaling
+  let allVals=[];
+  types.forEach(t=>sources.forEach(s=>{
+    const k=t+'|'+s;
+    if(avgMap[k])allVals.push(avgMap[k].sum/avgMap[k].cnt);
+  }));
+  const minV=Math.min(...allVals),maxV=Math.max(...allVals);
+
+  function heatColor(val) {
+    if(val===null)return'var(--bg3)';
+    const t=Math.max(0,Math.min(1,(val-minV)/(maxV-minV||1)));
+    // dark blue -> teal -> green -> amber
+    if(t<0.33){const f=t/0.33;return`rgba(59,130,246,${0.15+f*0.4})`;}
+    if(t<0.66){const f=(t-0.33)/0.33;return`rgba(16,185,129,${0.25+f*0.35})`;}
+    const f=(t-0.66)/0.34;return`rgba(245,158,11,${0.3+f*0.5})`;
+  }
+
+  let html='<table class="heatmap-table"><thead><tr><th></th>';
+  sources.forEach(s=>{html+=`<th title="${escHtml(s)}">${escHtml(s.slice(0,8))}</th>`;});
+  html+='</tr></thead><tbody>';
+
+  types.forEach(t=>{
+    html+=`<tr><th>${escHtml(t)}</th>`;
+    sources.forEach(s=>{
+      const k=t+'|'+s;
+      const cell=avgMap[k];
+      if(cell){
+        const avg=(cell.sum/cell.cnt).toFixed(2);
+        const bg=heatColor(cell.sum/cell.cnt);
+        html+=`<td style="background:${bg};color:var(--text)" title="${escHtml(t)} @ ${escHtml(s)}: $${avg}">$${avg}</td>`;
+      } else {
+        html+='<td style="color:var(--text4)">--</td>';
       }
-    }
+    });
+    html+='</tr>';
   });
+  html+='</tbody></table>';
+  grid.innerHTML=html;
 }
 
 /* ─────────────────────────────────────────
    TABLE
 ───────────────────────────────────────── */
-function renderTable(data, append=false) {
-  filteredData = data;
+function renderTable(data) {
+  filteredData = applySearch(data);
   const tbody = document.getElementById('tbody');
-  const slice = data.slice(0, (page+1)*PAGE_SIZE);
-  const hasMore = data.length > slice.length;
+  const shown = Math.min(filteredData.length, (page+1)*PAGE_SIZE);
+  const slice = filteredData.slice(0, shown);
+  const hasMore = filteredData.length > shown;
 
-  document.getElementById('tableTitle').textContent = `Prices (${data.length})`;
-  document.getElementById('loadMoreWrap').style.display = hasMore ? 'block' : 'none';
+  const total=filteredData.length;
+  document.getElementById('rowCount').textContent=`Showing ${Math.min(shown,total)} of ${total.toLocaleString()}`;
+  document.getElementById('loadMoreWrap').style.display=hasMore?'block':'none';
 
-  if (slice.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">&#9647;</div>No results match your filters</div></td></tr>';
+  if(!slice.length){
+    tbody.innerHTML='<tr><td colspan="9"><div class="empty">No results match your filters</div></td></tr>';
     return;
   }
 
-  tbody.innerHTML = slice.map((r, i) => {
-    const stockStr = r.stock > 0
-      ? `<span class="in-stock">${r.stock.toLocaleString()}</span>`
-      : `<span class="no-stock">--</span>`;
-    const link = r.link
-      ? `<a href="${escHtml(r.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open</a>`
-      : '';
-    const chipSafe = escHtml(r.chip);
-    const delay = Math.min(i, 15) * 30;
-    return `<tr onclick="openDetail(${r.id})" style="animation-delay:${delay}ms">
+  tbody.innerHTML=slice.map((r,i)=>{
+    const stockStr=r.stock>0
+      ?`<span class="in-stock">${r.stock.toLocaleString()}</span>`
+      :`<span class="no-stock">--</span>`;
+    const link=r.link
+      ?`<a href="${escHtml(r.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open</a>`:'';
+    const delay=Math.min(i,15)*30;
+    return`<tr onclick="openDetail(${r.id})" style="animation-delay:${delay}ms">
       <td class="td-type">${escHtml(r.type)}</td>
-      <td class="td-chip">${chipSafe}</td>
+      <td class="td-chip">${escHtml(r.chip)}</td>
       <td class="td-brand">${escHtml(r.brand)}</td>
+      <td class="td-cap">${escHtml(r.capacity)}</td>
       <td><span class="td-src">${escHtml(r.source)}</span></td>
       <td class="td-price">$${r.price_usd.toFixed(2)}</td>
-      <td class="td-rub">${r.price_rub ? r.price_rub.toLocaleString()+' ₽' : '--'}</td>
+      <td class="td-rub">${r.price_rub?r.price_rub.toLocaleString()+' \u20BD':'--'}</td>
       <td class="td-stock">${stockStr}</td>
       <td class="td-link">${link}</td>
     </tr>`;
   }).join('');
 }
 
-function loadMore() {
+function loadMore(){
   page++;
   renderTable(filteredData);
-  document.getElementById('btnLoadMore').textContent = filteredData.length > (page+1)*PAGE_SIZE
-    ? 'Load more'
-    : 'No more results';
+  document.getElementById('btnLoadMore').textContent=
+    filteredData.length>(page+1)*PAGE_SIZE?'Load 25 more':'All loaded';
 }
 
-function escHtml(s) {
+function onSearch(){
+  searchQuery=document.getElementById('searchInput').value.trim();
+  page=0;
+  renderTable(lastFiltered);
+}
+
+function escHtml(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 /* ─────────────────────────────────────────
    TABLE SORT
 ───────────────────────────────────────── */
-document.querySelectorAll('th[data-col]').forEach(th => {
-  th.addEventListener('click', () => {
-    const col = th.dataset.col;
-    if (sortCol === col) sortAsc = !sortAsc;
-    else { sortCol = col; sortAsc = col !== 'price_usd' && col !== 'price_rub'; }
-    document.querySelectorAll('th').forEach(t => {
+document.querySelectorAll('th[data-col]').forEach(th=>{
+  th.addEventListener('click',()=>{
+    const col=th.dataset.col;
+    if(sortCol===col)sortAsc=!sortAsc;
+    else{sortCol=col;sortAsc=col!=='price_usd'&&col!=='price_rub';}
+    document.querySelectorAll('th').forEach(t=>{
       t.classList.remove('th-sorted');
-      t.querySelector('.th-arrow').innerHTML = '&#9650;';
+      t.querySelector('.th-arrow').innerHTML='&#9650;';
     });
     th.classList.add('th-sorted');
-    th.querySelector('.th-arrow').innerHTML = sortAsc ? '&#9650;' : '&#9660;';
-    page = 0;
-    refresh();
+    th.querySelector('.th-arrow').innerHTML=sortAsc?'&#9650;':'&#9660;';
+    page=0;refresh();
   });
 });
 
@@ -1130,209 +1203,170 @@ document.querySelectorAll('th[data-col]').forEach(th => {
    DETAIL MODAL
 ───────────────────────────────────────── */
 function openDetail(id) {
-  const entry = allPrices.find(r => r.id === id);
-  if (!entry) return;
+  const entry=allPrices.find(r=>r.id===id);
+  if(!entry)return;
 
-  document.getElementById('mTitle').textContent = entry.chip;
-  document.getElementById('mSub').textContent = `${entry.description} — ${entry.brand}`;
+  document.getElementById('mTitle').textContent=entry.chip;
+  document.getElementById('mSub').textContent=`${entry.description} — ${entry.brand} ${entry.capacity}`;
 
-  const siblings = allPrices
-    .filter(r => r.chip === entry.chip)
-    .sort((a,b) => a.price_usd - b.price_usd);
+  const siblings=allPrices.filter(r=>r.chip===entry.chip).sort((a,b)=>a.price_usd-b.price_usd);
 
-  document.getElementById('mSources').innerHTML = siblings.map((s,i) => {
-    const isMin = i === 0 ? ' style="border-color:rgba(16,185,129,0.35)"' : '';
-    return `<div class="src-row"${isMin}>
+  document.getElementById('mSources').innerHTML=siblings.map((s,i)=>{
+    const isMin=i===0?' style="border-color:rgba(16,185,129,0.35)"':'';
+    return`<div class="src-row"${isMin}>
       <div class="src-info">
         <div class="src-name">${escHtml(s.source)}</div>
         <div class="src-price">$${s.price_usd.toFixed(2)}</div>
-        <div class="src-meta">${s.price_rub ? s.price_rub.toLocaleString()+' ₽' : ''} ${s.stock > 0 ? '&#183; '+s.stock.toLocaleString()+' in stock' : '&#183; out of stock'}</div>
+        <div class="src-meta">${s.price_rub?s.price_rub.toLocaleString()+' \u20BD ':''} ${s.stock>0?'&middot; '+s.stock.toLocaleString()+' in stock':'&middot; out of stock'}</div>
       </div>
-      ${s.link ? `<a class="src-open" href="${escHtml(s.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">OPEN</a>` : ''}
+      ${s.link?`<a class="src-open" href="${escHtml(s.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">OPEN</a>`:''}
     </div>`;
   }).join('');
 
-  // Build per-source history mock for modal
-  if (detailChart) { detailChart.destroy(); detailChart = null; }
-  const ctx = document.getElementById('mChart').getContext('2d');
-  const dates = Array.from({length:14}, (_,i) => {
-    const d = new Date(); d.setDate(d.getDate()-(13-i));
+  if(detailChart){detailChart.destroy();detailChart=null;}
+  const ctx=document.getElementById('mChart').getContext('2d');
+  const dates=Array.from({length:14},(_,i)=>{
+    const d=new Date(); d.setDate(d.getDate()-(13-i));
     return d.toISOString().slice(0,10);
   });
-
-  const srcDatasets = siblings.map((s,i) => {
-    const color = PALETTE[i%8];
-    const base = s.price_usd;
-    const grad = ctx.createLinearGradient(0,0,0,200);
-    grad.addColorStop(0, color+'44'); grad.addColorStop(1, color+'08');
-    return {
-      label: s.source,
-      data: dates.map(() => +(base * (0.85+Math.random()*0.3)).toFixed(2)),
-      borderColor: color,
-      backgroundColor: grad,
-      borderWidth: 1.5,
-      fill: true,
-      tension: 0.4,
-      pointRadius: 0,
-      pointHoverRadius: 6,
-      pointHoverBackgroundColor: color,
-      pointHoverBorderColor: '#09090b',
-      pointHoverBorderWidth: 2,
+  const srcDatasets=siblings.map((s,i)=>{
+    const color=PALETTE[i%10];
+    const base=s.price_usd;
+    const grad=ctx.createLinearGradient(0,0,0,200);
+    grad.addColorStop(0,color+'44'); grad.addColorStop(1,color+'08');
+    return{
+      label:s.source,
+      data:dates.map(()=>+(base*(0.85+Math.random()*0.3)).toFixed(2)),
+      borderColor:color,backgroundColor:grad,
+      borderWidth:1.5,fill:true,tension:0.4,
+      pointRadius:0,pointHoverRadius:6,
+      pointHoverBackgroundColor:color,pointHoverBorderColor:'#09090b',pointHoverBorderWidth:2,
     };
   });
 
-  detailChart = new Chart(ctx, {
-    type: 'line',
-    data: {labels:dates, datasets:srcDatasets},
-    options: {
-      animation: CHART_ANIM,
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: {intersect:false, mode:'index'},
-      plugins: {
-        legend: {labels:{color:'#a1a1aa',font:{size:10},boxWidth:8,boxHeight:8,padding:8}},
-        tooltip: {
-          ...TOOLTIP_DEFAULTS,
-          callbacks: {label: item => ` ${item.dataset.label}: $${item.raw.toFixed(2)}`}
-        }
+  detailChart=new Chart(ctx,{
+    type:'line',data:{labels:dates,datasets:srcDatasets},
+    options:{
+      animation:CHART_ANIM,responsive:true,maintainAspectRatio:false,
+      interaction:{intersect:false,mode:'index'},
+      plugins:{
+        legend:{labels:{color:'#a1a1aa',font:{size:10},boxWidth:8,boxHeight:8,padding:8}},
+        tooltip:{...TOOLTIP_DEF,callbacks:{label:item=>` ${item.dataset.label}: $${item.raw.toFixed(2)}`}}
       },
-      scales: {
-        x: {
-          grid:{display:false},
-          ticks:{color:'#52525b',font:{size:9,family:"'JetBrains Mono',monospace"},maxTicksLimit:6},
-          border:{display:false}
-        },
-        y: {
-          grid:{color:'rgba(39,39,42,0.6)'},
-          ticks:{color:'#52525b',font:{size:9,family:"'JetBrains Mono',monospace"},callback:v=>'$'+v},
-          border:{display:false}
-        }
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#52525b',font:{size:9,family:"'JetBrains Mono',monospace"},maxTicksLimit:6},border:{display:false}},
+        y:{grid:{color:'rgba(39,39,42,0.6)'},ticks:{color:'#52525b',font:{size:9,family:"'JetBrains Mono',monospace"},callback:v=>'$'+v},border:{display:false}}
       }
     }
   });
 
   document.getElementById('overlay').classList.add('show');
-  document.body.style.overflow = 'hidden';
-  if (tg?.BackButton) tg.BackButton.show();
+  document.body.style.overflow='hidden';
+  if(tg?.BackButton)tg.BackButton.show();
 }
 
-function closeModal() {
+function closeModal(){
   document.getElementById('overlay').classList.remove('show');
-  document.body.style.overflow = '';
-  if (tg?.BackButton) tg.BackButton.hide();
+  document.body.style.overflow='';
+  if(tg?.BackButton)tg.BackButton.hide();
 }
 
-document.getElementById('overlay').addEventListener('click', e => {
-  if (e.target.id === 'overlay') closeModal();
+document.getElementById('overlay').addEventListener('click',e=>{
+  if(e.target.id==='overlay')closeModal();
 });
 
 /* ─────────────────────────────────────────
    REFRESH PIPELINE
 ───────────────────────────────────────── */
 function refresh() {
-  const data = applyFilters(allPrices);
-  page = 0;
+  const data=applyFilters(allPrices);
+  lastFiltered=data;
+  page=0;
   renderKPIs(data);
   renderChartByType(data);
   renderChartBySource(data);
-  renderChartAvg(data);
+  renderChartBrands(data);
+  renderChartPriceRange(data);
+  renderHeatmap(data);
   renderTable(data);
+  // Update source drill dropdown
+  const sources=[...new Set(data.map(r=>r.source))].sort();
+  const selD=document.getElementById('selDrillSource');
+  const prev=selD.value;
+  selD.innerHTML='<option value="">All</option>'+sources.map(s=>`<option value="${s}">${s}</option>`).join('');
+  selD.value=sources.includes(prev)?prev:'';
 }
 
 /* ─────────────────────────────────────────
-   FILTER EVENT LISTENERS
+   FILTER LISTENERS
 ───────────────────────────────────────── */
-['selType','selBrand','selSource'].forEach(id => {
-  document.getElementById(id).addEventListener('change', () => { page=0; refresh(); });
+['selType','selBrand','selSource','selCapacity'].forEach(id=>{
+  document.getElementById(id).addEventListener('change',()=>{page=0;refresh();});
 });
 
-document.getElementById('selSort').addEventListener('change', () => {
-  const v = document.getElementById('selSort').value;
-  const map = {
-    price_asc: {col:'price_usd',asc:true},
-    price_desc: {col:'price_usd',asc:false},
-    name_asc: {col:'chip',asc:true},
-    rub_desc: {col:'price_rub',asc:false}
-  };
-  const s = map[v];
-  if (s) { sortCol=s.col; sortAsc=s.asc; }
-  page=0; refresh();
+document.getElementById('selSort').addEventListener('change',()=>{
+  const v=document.getElementById('selSort').value;
+  const map={price_asc:{col:'price_usd',asc:true},price_desc:{col:'price_usd',asc:false},name_asc:{col:'chip',asc:true},rub_desc:{col:'price_rub',asc:false}};
+  const s=map[v];
+  if(s){sortCol=s.col;sortAsc=s.asc;}
+  page=0;refresh();
 });
 
 /* ─────────────────────────────────────────
-   LOAD DATA
+   FETCH WITH FALLBACK
 ───────────────────────────────────────── */
 async function fetchWithFallback(url) {
-  const ctrl = new AbortController();
-  const timeout = setTimeout(() => ctrl.abort(), 5000);
-  try {
-    const res = await fetch(url, {signal:ctrl.signal});
-    if (!res.ok) throw new Error('HTTP '+res.status);
+  const ctrl=new AbortController();
+  const timeout=setTimeout(()=>ctrl.abort(),5000);
+  try{
+    const res=await fetch(url,{signal:ctrl.signal});
+    if(!res.ok)throw new Error('HTTP '+res.status);
     return await res.json();
-  } finally {
-    clearTimeout(timeout);
-  }
+  }finally{clearTimeout(timeout);}
 }
 
 function formatUpdated(iso) {
-  if (!iso) return '--';
-  try {
-    const d = new Date(iso);
-    const now = new Date();
-    const diffMin = Math.round((now-d)/60000);
-    if (diffMin < 1) return 'just now';
-    if (diffMin < 60) return diffMin+'m ago';
-    const h = Math.round(diffMin/60);
-    if (h < 24) return h+'h ago';
+  if(!iso)return'--';
+  try{
+    const d=new Date(iso),now=new Date();
+    const diffMin=Math.round((now-d)/60000);
+    if(diffMin<1)return'just now';
+    if(diffMin<60)return diffMin+'m ago';
+    const h=Math.round(diffMin/60);
+    if(h<24)return h+'h ago';
     return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  } catch(e) { return iso.slice(0,10); }
+  }catch(e){return iso.slice(0,10);}
 }
 
+/* ─────────────────────────────────────────
+   INIT
+───────────────────────────────────────── */
 async function init() {
-  let prices = null;
-  let stats = null;
-  let history = null;
+  let prices=null,stats=null;
 
-  // Try real API
+  const apiBase = API_URL || (window.location.origin+'/api/');
   try {
-    [stats, prices] = await Promise.all([
-      fetchWithFallback(API_URL + 'stats'),
-      fetchWithFallback(API_URL + 'prices?limit=500')
+    [stats,prices]=await Promise.all([
+      fetchWithFallback(apiBase+'stats'),
+      fetchWithFallback(apiBase+'prices?limit=2000')
     ]);
-
-    // Normalize API response
-    if (prices && prices.items) prices = prices.items;
-    if (!Array.isArray(prices)) throw new Error('unexpected prices format');
-
-    // Try to load history
-    try {
-      // Build trend from types
-      const types = [...new Set(prices.map(p=>p.type))];
-      const trendData = await Promise.all(types.slice(0,5).map(t => fetchWithFallback(API_URL + 'charts/avg_by_type')));
-      history = {types, dates:[], hist:{}};
-    } catch(e) {
-      history = null;
-    }
-
-    document.getElementById('updatedBadge').textContent = 'Updated '+formatUpdated(stats?.updated);
+    if(prices&&prices.items)prices=prices.items;
+    if(!Array.isArray(prices))throw new Error('unexpected format');
+    document.getElementById('updatedBadge').textContent='Updated '+formatUpdated(stats?.updated);
   } catch(e) {
-    // Fall back to mock data
-    demoMode = true;
-    prices = buildMockData();
-    stats = buildMockStats(prices);
-    history = buildMockHistory(prices);
-    document.getElementById('demoBadge').style.display = 'block';
-    document.getElementById('updatedBadge').textContent = 'Demo data';
+    demoMode=true;
+    prices=buildMockData();
+    stats=buildMockStats(prices);
+    historyData=buildMockHistory(prices);
+    document.getElementById('demoBadge').style.display='block';
+    document.getElementById('updatedBadge').textContent='Demo data';
   }
 
-  // Assign stable ids if missing
-  prices.forEach((p, i) => { if (p.id === undefined) p.id = i; });
-  allPrices = prices;
-  historyData = history;
+  prices.forEach((p,i)=>{if(p.id===undefined)p.id=i;});
+  allPrices=prices;
 
   populateSelectors(allPrices);
   refresh();
-  renderChartTrend(historyData);
 }
 
 init();
