@@ -848,9 +848,9 @@ function populateSelectors(data) {
 ───────────────────────────────────────── */
 function renderKPIs(data) {
   animCount('kpiTotal',data.length);
-  animCount('kpiTypes',[...new Set(data.map(r=>r.type))].size);
-  animCount('kpiBrands',[...new Set(data.map(r=>r.brand))].size);
-  animCount('kpiSources',[...new Set(data.map(r=>r.source))].size);
+  animCount('kpiTypes',new Set(data.map(r=>r.type)).size);
+  animCount('kpiBrands',new Set(data.map(r=>r.brand)).size);
+  animCount('kpiSources',new Set(data.map(r=>r.source)).size);
 }
 
 function animCount(id,target) {
@@ -1352,8 +1352,16 @@ async function init() {
     ]);
     if(prices&&prices.items)prices=prices.items;
     if(!Array.isArray(prices))throw new Error('unexpected format');
+    // Normalize API field names to webapp convention
+    prices=prices.map(p=>({...p,
+      type:p.chip_type||p.type,
+      chip:p.part_number||p.chip,
+      link:p.url||p.link,
+      stock:p.moq||p.stock
+    }));
     document.getElementById('updatedBadge').textContent='Updated '+formatUpdated(stats?.updated);
   } catch(e) {
+    console.error('API fetch failed, falling back to demo:',e);
     demoMode=true;
     prices=buildMockData();
     stats=buildMockStats(prices);
