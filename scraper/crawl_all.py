@@ -169,43 +169,35 @@ async def crawl_findchips(rate: float) -> list[dict]:
     return entries
 
 async def crawl_szlcsc(rate: float) -> list[dict]:
-    """SZLCSC (Chinese LCSC) — SSR HTML with __NEXT_DATA__."""
+    """SZLCSC (Chinese LCSC) — SSR HTML with __NEXT_DATA__ (requires Googlebot UA for SSR mode)."""
     log.info("SZLCSC: starting")
     entries = []
+    # Googlebot UA triggers SSR mode: __NEXT_DATA__ with full product list (30 items/page).
+    # Regular browser UA causes CSR-only response with just 3 JSON-LD items regardless of page.
     headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+        "User-Agent": "Googlebot/2.1 (+http://www.google.com/bot.html)",
         "Accept-Language": "zh-CN,zh;q=0.9",
     }
     CNY_TO_USD = 0.14
     async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=True) as client:
         for cat in CATEGORIES:
-            for pg in range(1, 20):
+            for pg in range(1, 51):  # up to 50 pages (1500 items / 30 per page)
                 try:
                     url = f"https://so.szlcsc.com/global.html?k={cat}&pageIndex={pg}&pageSize=30"
                     resp = await client.get(url)
                     if resp.status_code != 200:
                         break
-                    from scrapling.parser import Selector
-                    page = Selector(resp.text)
-                    script = page.css_first('script#__NEXT_DATA__')
-                    if not script:
+                    # Extract __NEXT_DATA__ via regex (faster than HTML parser)
+                    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text, re.DOTALL)
+                    if not m:
+                        log.warning(f"SZLCSC: {cat} page {pg} — no __NEXT_DATA__ (CSR mode?), stopping")
                         break
-                    data = json.loads(script.text())
-                    # Navigate to product list
-                    products = []
-                    props = data.get('props', {}).get('pageProps', {})
-                    # Try multiple paths
-                    for path in [
-                        lambda: props['productList'],
-                        lambda: props['soData']['searchResult']['productRecordList'],
-                        lambda: props['data']['productList'],
-                    ]:
-                        try:
-                            products = path()
-                            if products:
-                                break
-                        except (KeyError, TypeError):
-                            continue
+                    data = json.loads(m.group(1))
+                    # Path: props.pageProps.soData.searchResult.productRecordList
+                    try:
+                        products = data['props']['pageProps']['soData']['searchResult']['productRecordList']
+                    except (KeyError, TypeError):
+                        products = []
                     if not products:
                         break
                     for prod in products:
@@ -213,32 +205,38 @@ async def crawl_szlcsc(rate: float) -> list[dict]:
                             continue
                         vo = prod.get('productVO', prod)
                         pn = vo.get('productModel', vo.get('productName', ''))
-                        desc = vo.get('productDescEn', vo.get('catalogName', ''))
+                        # productType is the category in English (e.g. "eMMC")
+                        desc = vo.get('productType', vo.get('remark', ''))
+                        if not desc:
+                            desc = ''
                         price_list = vo.get('productPriceList', [])
                         best_cny = 0.0
                         for tier in price_list:
                             if isinstance(tier, dict):
-                                p = float(tier.get('productPrice', tier.get('price', 0)) or 0)
-                                q = int(tier.get('ladder', tier.get('startPurchasedNumber', 0)) or 0)
+                                p = float(tier.get('productPrice', tier.get('thePrice', 0)) or 0)
+                                q = int(tier.get('startPurchasedNumber', tier.get('spNumber', 0)) or 0)
                                 if p > 0 and (q <= 10 or best_cny == 0):
                                     best_cny = p
-                        if best_cny <= 0:
+                        if best_cny <= 0 or not pn:
                             continue
                         price_usd = round(best_cny * CNY_TO_USD, 4)
+                        brand_raw = vo.get('productGradePlateName', '')
+                        # Strip Chinese brand name suffix in parentheses
+                        brand_clean = re.sub(r'\(.*?\)', '', brand_raw).strip()
                         entries.append({
                             'chip_type': classify_type(pn, desc),
                             'part_number': pn,
                             'description': desc[:200],
-                            'brand': extract_brand(pn, desc),
+                            'brand': extract_brand(pn, brand_clean) if extract_brand(pn, '') == 'Other' else extract_brand(pn, ''),
                             'capacity': '',
                             'source': 'szlcsc',
                             'distributor': 'SZLCSC',
                             'price_usd': price_usd,
                             'price_rub': round(price_usd * rate, 2),
                             'price_cny': best_cny,
-                            'moq': 1,
-                            'stock': int(vo.get('stockNumber', vo.get('stockCount', 0)) or 0),
-                            'url': f"https://so.szlcsc.com/global.html?k={pn}",
+                            'moq': int(vo.get('minBuyNumber', 1) or 1),
+                            'stock': int(vo.get('stockNumber', vo.get('validStockNumber', 0)) or 0),
+                            'url': f"https://item.szlcsc.com/{vo.get('productId', '')}.html",
                         })
                     log.info(f"SZLCSC: {cat} page {pg}, {len(products)} products, total {len(entries)}")
                     await asyncio.sleep(2)
@@ -308,39 +306,64 @@ async def crawl_jlcpcb(rate: float) -> list[dict]:
     return entries
 
 async def crawl_memorymarket(rate: float) -> list[dict]:
-    """MemoryMarket — spot price index + detail pages."""
+    """MemoryMarket — spot price index + detail pages.
+
+    Main page has 16 tables with columns: [Product Item, Latest, Previous, Change, Currency, Trend].
+    Price is in column index 1 (Latest), NOT index 2 (Previous).
+    Tables with 'Add Cost Item' header are component-cost tables — skip them.
+
+    Detail page IDs: valid range is ~100160–100257 (not 1–500).
+    IDs outside this range return HTTP 500.
+    """
     log.info("MemoryMarket: starting")
     entries = []
     headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"}
     async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=True) as client:
-        # Main page
+        # ── Main page: 16 price tables ──────────────────────────────────────
         try:
             resp = await client.get("https://www.memorymarket.com/")
             if resp.status_code == 200:
-                from scrapling.parser import Selector
-                page = Selector(resp.text)
-                for table in page.css('table'):
-                    hdrs = [th.text(strip=True).lower() for th in table.css('thead th')]
-                    if not hdrs:
+                # Use regex-based parsing (scrapling not available on all envs)
+                html = resp.text
+                table_blocks = re.findall(r'<table[^>]*>(.*?)</table>', html, re.DOTALL)
+                before_count = len(entries)
+                for table_html in table_blocks:
+                    # Determine header row
+                    header_cells = re.findall(r'<t[hd][^>]*>(.*?)</t[hd]>',
+                                              re.search(r'<thead[^>]*>(.*?)</thead>', table_html, re.DOTALL).group(1)
+                                              if re.search(r'<thead', table_html, re.DOTALL) else '', re.DOTALL)
+                    headers_text = [re.sub(r'<[^>]+>', '', h).strip().lower() for h in header_cells]
+                    # Only process "product item / latest / ..." tables
+                    if not headers_text or 'product item' not in headers_text[0]:
                         continue
-                    for tr in table.css('tbody tr'):
-                        cells = [td.text(strip=True) for td in tr.css('td')]
-                        if len(cells) < 3:
+                    # Price column: find index of "latest"
+                    price_col = headers_text.index('latest') if 'latest' in headers_text else 1
+                    # Parse tbody rows
+                    tbody_m = re.search(r'<tbody[^>]*>(.*?)</tbody>', table_html, re.DOTALL)
+                    if not tbody_m:
+                        continue
+                    rows = re.findall(r'<tr[^>]*>(.*?)</tr>', tbody_m.group(1), re.DOTALL)
+                    for row in rows:
+                        cells_raw = re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', row, re.DOTALL)
+                        cells = [re.sub(r'<[^>]+>', '', c).strip() for c in cells_raw]
+                        if len(cells) <= price_col:
+                            continue
+                        # Extract product name (first cell, strip inner tags)
+                        product = cells[0]
+                        if not product:
                             continue
                         try:
-                            price = float(cells[2].replace(',', '').replace('$', ''))
-                        except ValueError:
+                            price = float(cells[price_col].replace(',', '').replace('$', ''))
+                        except (ValueError, IndexError):
                             continue
                         if price <= 0:
                             continue
-                        product = cells[0]
-                        spec = cells[1] if len(cells) > 1 else ''
                         entries.append({
-                            'chip_type': classify_type(product, spec),
-                            'part_number': f"{product} {spec}".strip(),
-                            'description': f"{product} {spec} spot index",
+                            'chip_type': classify_type(product, ''),
+                            'part_number': product,
+                            'description': f"{product} spot index",
                             'brand': extract_brand(product, ''),
-                            'capacity': spec,
+                            'capacity': '',
                             'source': 'memorymarket',
                             'distributor': 'Spot Index',
                             'price_usd': round(price, 4),
@@ -350,44 +373,55 @@ async def crawl_memorymarket(rate: float) -> list[dict]:
                             'stock': None,
                             'url': 'https://www.memorymarket.com/',
                         })
-                log.info(f"MemoryMarket: main page, {len(entries)} entries")
+                log.info(f"MemoryMarket: main page, {len(entries) - before_count} entries from tables")
         except Exception as e:
             log.warning(f"MemoryMarket: main page error: {e}")
-        # Detail pages /price/in/1..500
-        for pid in range(1, 500):
+
+        # ── Detail pages: valid IDs are 100160–100257 (only ~12 exist) ───────
+        # IDs outside this range return HTTP 500. Range 1–500 is completely wrong.
+        # We scan 100160–100300 to cover all known IDs and handle future additions.
+        for pid in range(100160, 100301):
             try:
                 resp = await client.get(f"https://www.memorymarket.com/price/in/{pid}")
                 if resp.status_code != 200:
                     continue
-                from scrapling.parser import Selector
-                page = Selector(resp.text)
-                title = page.css_first('h1')
-                if not title:
+                html = resp.text
+                # Extract page title
+                title_m = re.search(r'<title>(.*?)</title>', html, re.DOTALL)
+                if not title_m:
                     continue
-                title_text = title.text(strip=True)
-                # Look for price in page
-                price_el = page.find_by_regex(r'\$[\d,.]+')
-                if price_el:
-                    price_text = price_el[0].text(strip=True) if hasattr(price_el[0], 'text') else str(price_el[0])
-                    price = parse_price(price_text)
-                    if price > 0:
-                        entries.append({
-                            'chip_type': classify_type(title_text, ''),
-                            'part_number': title_text[:100],
-                            'description': title_text[:200],
-                            'brand': extract_brand(title_text, ''),
-                            'capacity': '',
-                            'source': 'memorymarket',
-                            'distributor': 'MemoryMarket',
-                            'price_usd': round(price, 4),
-                            'price_rub': round(price * rate, 2),
-                            'price_cny': None,
-                            'moq': 0,
-                            'stock': None,
-                            'url': f'https://www.memorymarket.com/price/in/{pid}',
-                        })
-                if pid % 50 == 0:
-                    log.info(f"MemoryMarket: detail pages 1-{pid}, total {len(entries)}")
+                title_text = re.sub(r'\s*\|.*', '', title_m.group(1)).strip()
+                # Extract latest price from the first price table (second table has historical data)
+                # Look for the price table rows: date | low | open | close
+                # The latest price is in the first data row of table 2 (the history table)
+                price = 0.0
+                # Detail page price is in span.n-price inside div.new-price: "$28.00"
+                new_price_m = re.search(r'class="n-price[^"]*">\s*\$([\d.]+)', html)
+                if new_price_m:
+                    price = parse_price(new_price_m.group(1))
+                else:
+                    # fallback: first price value from history table (date | low | open | close)
+                    table_m = re.search(r'<td[^>]*>([\d]{4}-[\d]{2}-[\d]{2})[^<]*</td>.*?<td[^>]*>([\d.]+)</td>', html, re.DOTALL)
+                    if table_m:
+                        price = parse_price(table_m.group(2))
+                if price > 0:
+                    entries.append({
+                        'chip_type': classify_type(title_text, ''),
+                        'part_number': title_text[:100],
+                        'description': f"{title_text} historical spot price",
+                        'brand': extract_brand(title_text, ''),
+                        'capacity': '',
+                        'source': 'memorymarket',
+                        'distributor': 'MemoryMarket',
+                        'price_usd': round(price, 4),
+                        'price_rub': round(price * rate, 2),
+                        'price_cny': None,
+                        'moq': 0,
+                        'stock': None,
+                        'url': f'https://www.memorymarket.com/price/in/{pid}',
+                    })
+                if pid % 20 == 0:
+                    log.info(f"MemoryMarket: scanned up to id {pid}, total {len(entries)}")
                 await asyncio.sleep(0.5)
             except Exception:
                 continue
