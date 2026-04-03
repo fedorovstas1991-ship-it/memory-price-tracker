@@ -1320,7 +1320,7 @@ document.getElementById('selSort').addEventListener('change',()=>{
 ───────────────────────────────────────── */
 async function fetchWithFallback(url) {
   const ctrl=new AbortController();
-  const timeout=setTimeout(()=>ctrl.abort(),5000);
+  const timeout=setTimeout(()=>ctrl.abort(),15000);
   try{
     const res=await fetch(url,{signal:ctrl.signal});
     if(!res.ok)throw new Error('HTTP '+res.status);
@@ -1370,7 +1370,7 @@ async function init() {
     stats=buildMockStats(prices);
     historyData=buildMockHistory(prices);
     document.getElementById('demoBadge').style.display='block';
-    document.getElementById('updatedBadge').textContent='Demo data';
+    document.getElementById('updatedBadge').textContent='ERR: '+e.message+' | '+apiBase;
   }
 
   prices.forEach((p,i)=>{if(p.id===undefined)p.id=i;});
