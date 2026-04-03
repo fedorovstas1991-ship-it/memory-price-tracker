@@ -100,6 +100,57 @@ CATEGORIES = [
     "Flash Memory", "DRAM", "SDRAM", "Memory IC",
 ]
 
+# Expanded keyword list for JLCPCB/LCSC: generic types + manufacturer part prefixes.
+# Each prefix targets a distinct product family and returns unique results that the
+# generic type queries miss (because the search index matches on part number prefix).
+# 60 keywords × 100 per page × 2 sources (jlcpcb + lcsc) = up to 12 000 entries.
+# 60 categories × 15 s cooldown = ~15 min total — acceptable for a nightly cron job.
+EXPANDED_KEYWORDS = [
+    # Generic types (same as CATEGORIES, kept for baseline coverage)
+    "eMMC", "UFS", "DDR4", "DDR5", "DDR3", "LPDDR4", "LPDDR5",
+    "NAND Flash", "NOR Flash", "SRAM", "Flash Memory", "DRAM", "SDRAM",
+    # Samsung eMMC / UFS
+    "KLMAG", "KLMBG", "KLUCG", "KLUDG",
+    # Kioxia (formerly Toshiba)
+    "THGBM", "THGJF", "TC58",
+    # Micron
+    "MTFC", "MT41K", "MT40A", "MT53E", "MT60B", "MT29F",
+    # SK Hynix
+    "H5AN", "H5CG", "H9J",
+    # Winbond NOR / NAND
+    "W25Q128", "W25Q256", "W25Q64", "W25N",
+    # GigaDevice
+    "GD25Q", "GD5F",
+    # Macronix
+    "MX25L", "MX25U", "MX66",
+    # ISSI
+    "IS25", "IS62", "IS66",
+    # Samsung DRAM
+    "K4A8G", "K4AAG", "K4RAH", "K4F6E", "K4UBE",
+    # Samsung NAND
+    "K9GBG", "K9F2G",
+    # Nanya
+    "NT5CC", "NT5AD",
+    # Alliance
+    "AS4C", "AS7C",
+    # Cypress / Spansion NOR
+    "S25FL", "S29GL",
+    # Microchip SST
+    "SST26", "SST39",
+    # Adesto / Dialog
+    "AT25", "AT45",
+    # Cypress FRAM
+    "FM25", "FM24",
+    # Micron NOR (legacy N25Q brand, now MT25Q)
+    "N25Q", "MT25Q",
+    # Cypress SRAM
+    "CY62", "CY7C",
+]
+
+# FindChips uses both the generic category names AND manufacturer prefixes so that
+# the unlimited pagination returns the widest possible unique result set.
+FINDCHIPS_KEYWORDS = CATEGORIES + [kw for kw in EXPANDED_KEYWORDS if kw not in CATEGORIES]
+
 async def crawl_findchips(rate: float) -> list[dict]:
     """FindChips — HTML scraping with pagination."""
     log.info("FindChips: starting")
@@ -109,8 +160,8 @@ async def crawl_findchips(rate: float) -> list[dict]:
         "Accept": "text/html",
     }
     async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=True) as client:
-        for cat in CATEGORIES:
-            for page_num in range(1, 30):  # up to 30 pages per category
+        for cat in FINDCHIPS_KEYWORDS:
+            for page_num in range(1, 30):  # up to 30 pages per keyword
                 try:
                     url = f"https://www.findchips.com/search/{cat}"
                     params = {"page": page_num} if page_num > 1 else {}
@@ -341,7 +392,7 @@ async def crawl_jlcpcb(rate: float) -> list[dict]:
     """JLCPCB SMT component library — JSON API with anti-rate-limit delay."""
     log.info("JLCPCB: starting")
     entries = await _jlcpcb_fetch_pages(
-        categories=CATEGORIES,
+        categories=EXPANDED_KEYWORDS,
         rate=rate,
         source='jlcpcb',
         distributor='JLCPCB/LCSC',
@@ -354,15 +405,6 @@ async def crawl_jlcpcb(rate: float) -> list[dict]:
 
 # ─── LCSC International ──────────────────────────────────────────────
 
-# Keywords specifically effective for LCSC's international catalogue.
-# Subset of CATEGORIES optimised for the LCSC search index (avoids
-# redundant queries that return 0 results on the LCSC side).
-LCSC_KEYWORDS = [
-    "eMMC", "UFS", "DDR4", "DDR5", "DDR3",
-    "LPDDR4", "LPDDR5", "NAND Flash", "NOR Flash", "SRAM",
-    "Flash Memory", "DRAM", "SDRAM",
-]
-
 async def crawl_lcsc(rate: float) -> list[dict]:
     """LCSC International (lcsc.com) — uses the JLCPCB/LCSC component search JSON API.
 
@@ -370,10 +412,12 @@ async def crawl_lcsc(rate: float) -> list[dict]:
     lcsc.com product pages and USD prices already denominated in USD.
     We tag entries source='lcsc' / distributor='LCSC' to keep them separate from
     the JLCPCB SMT-library entries.
+    Uses EXPANDED_KEYWORDS (same as JLCPCB) so both sources are queried with the
+    full 60-keyword list, yielding up to ~6 000 unique LCSC entries.
     """
     log.info("LCSC: starting")
     entries = await _jlcpcb_fetch_pages(
-        categories=LCSC_KEYWORDS,
+        categories=EXPANDED_KEYWORDS,
         rate=rate,
         source='lcsc',
         distributor='LCSC',
