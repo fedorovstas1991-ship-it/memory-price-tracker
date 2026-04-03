@@ -15,7 +15,7 @@ from html import unescape
 import asyncpg
 import httpx
 from scrapling import Fetcher
-from scrapling.fetchers import StealthySession
+from scrapling.fetchers import AsyncStealthySession
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 log = logging.getLogger("crawl_all")
@@ -435,11 +435,11 @@ async def crawl_chipdip(rate: float) -> list[dict]:
     log.info("ChipDip: starting (stealth mode)")
     entries = []
     try:
-        with StealthySession(headless=True) as session:
+        async with AsyncStealthySession(headless=True) as session:
             for pg in range(1, 50):
                 try:
                     url = f"https://www.chipdip.ru/catalog-show/ic-memory?x.page={pg}"
-                    page = session.fetch(url)
+                    page = await session.fetch(url)
                     items = page.css('.with-hover', all=True) or page.css('[class*=item]', all=True)
                     if not items:
                         log.info(f"ChipDip: page {pg} — no items, stopping")
@@ -473,7 +473,7 @@ async def crawl_chipdip(rate: float) -> list[dict]:
                             'url': f"https://www.chipdip.ru{href}" if href.startswith('/') else href,
                         })
                     log.info(f"ChipDip: page {pg}, {len(items)} items, total {len(entries)}")
-                    time.sleep(2)
+                    await asyncio.sleep(2)
                 except Exception as e:
                     log.warning(f"ChipDip: page {pg} error: {e}")
                     break
@@ -488,11 +488,11 @@ async def crawl_ebay(rate: float) -> list[dict]:
     entries = []
     SEARCH_CATS = ["eMMC chip", "DDR4 IC", "NAND Flash IC", "NOR Flash IC", "DDR5 SDRAM", "LPDDR4 chip", "UFS IC"]
     try:
-        with StealthySession(headless=True) as session:
+        async with AsyncStealthySession(headless=True) as session:
             for cat in SEARCH_CATS:
                 try:
                     url = f"https://www.ebay.com/sch/i.html?_nkw={cat.replace(' ', '+')}&_sacat=0&LH_BIN=1&_pgn=1"
-                    page = session.fetch(url, network_idle=True)
+                    page = await session.fetch(url, network_idle=True)
                     cards = page.css('.s-item', all=True) or []
                     count = 0
                     for card in cards:
@@ -523,7 +523,7 @@ async def crawl_ebay(rate: float) -> list[dict]:
                             'url': url,
                         })
                     log.info(f"eBay: '{cat}' — {count} listings, total {len(entries)}")
-                    time.sleep(3)
+                    await asyncio.sleep(3)
                 except Exception as e:
                     log.warning(f"eBay: '{cat}' error: {e}")
     except Exception as e:
