@@ -524,23 +524,28 @@ function renderMktCards(){
     });
     if(!good.length)continue;
     html+='<div class="mkt-section"><div class="mkt-title"><span>'+m.icon+'</span> '+esc(m.name)+' <span style="font-size:10px;color:var(--text3);font-weight:400">('+good.length+')</span></div>';
-    good.forEach(i=>{
-      const avg=Number(i.session_avg),avgStr='$'+avg.toFixed(2);
-      const hi=i.daily_high!=null?Number(i.daily_high):null;
-      const lo=i.daily_low!=null?Number(i.daily_low):null;
-      const rangeStr=(lo!=null&&hi!=null&&lo>0)?'$'+lo.toFixed(2)+' — $'+hi.toFixed(2):'';
-      const chg=String(i.session_change||'').trim();
-      const chgNum=parseFloat(chg);
-      let chgClass='flat',chgStr='—';
-      if(!isNaN(chgNum)&&chgNum>0){chgClass='up';chgStr='+'+chgNum.toFixed(2)+'%';}
-      else if(!isNaN(chgNum)&&chgNum<0){chgClass='down';chgStr=chgNum.toFixed(2)+'%';}
-      else if(chg&&chg!=='0'&&chg!=='0.00 %'){chgStr=chg;chgClass=chg.includes('-')?'down':chg.includes('+')?'up':'flat';}
-      const srcLabel=i.source==='dramexchange'?'DRAMeX · сегодня':'TrendForce';
-      html+='<div class="mkt-card" onclick="openMktHistory(\''+esc(i.item).replace(/'/g,"\\'")+'\')">'+
-        '<div class="mkt-row1"><div class="mkt-item">'+esc(i.item)+'</div><div class="mkt-avg">'+avgStr+'</div></div>'+
-        '<div class="mkt-row2">'+(rangeStr?'<span class="mkt-range">'+rangeStr+'</span>':'')+
-        '<span class="mkt-chg '+chgClass+'">'+esc(chgStr)+'</span>'+
-        '<span class="mkt-src">'+esc(srcLabel)+'</span></div></div>';
+    // Group by item name to merge sources
+    const byName={};
+    good.forEach(i=>{if(!byName[i.item])byName[i.item]=[];byName[i.item].push(i);});
+    Object.entries(byName).forEach(([name,arr])=>{
+      // Build price lines per source
+      let priceLines='';
+      arr.forEach(i=>{
+        const avg=Number(i.session_avg),avgStr='$'+avg.toFixed(2);
+        const srcLabel=i.source==='dramexchange'?'DRAMeX':'TrendForce';
+        const chg=String(i.session_change||'').trim();
+        const chgNum=parseFloat(chg);
+        let chgClass='flat',chgStr='';
+        if(!isNaN(chgNum)&&chgNum>0){chgClass='up';chgStr='+'+chgNum.toFixed(2)+'%';}
+        else if(!isNaN(chgNum)&&chgNum<0){chgClass='down';chgStr=chgNum.toFixed(2)+'%';}
+        priceLines+='<div class="mkt-row2" style="margin-top:2px">'+
+          '<span class="mkt-src">'+srcLabel+'</span>'+
+          '<span class="mkt-avg" style="font-size:14px">'+avgStr+'</span>'+
+          (chgStr?'<span class="mkt-chg '+chgClass+'">'+esc(chgStr)+'</span>':'')+
+          '</div>';
+      });
+      html+='<div class="mkt-card" onclick="openMktHistory(\''+esc(name).replace(/'/g,"\\'")+'\')">'+
+        '<div class="mkt-item" style="margin-bottom:4px">'+esc(name)+'</div>'+priceLines+'</div>';
     });
     html+='</div>';
   }
@@ -577,14 +582,24 @@ async function openMktHistory(item){
       plugins:{legend:{labels:{color:'#a1a1aa',boxWidth:10,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': $'+c.raw?.toFixed(2)}}},
       scales:{x:{grid:{display:false},ticks:{color:'#71717a',font:{size:8},maxTicksLimit:8}},y:{grid:{color:'rgba(255,255,255,0.03)'},ticks:{color:'#71717a',callback:v=>'$'+v}}}
     }});
-    // Stats
-    const last=avgs[avgs.length-1],first=avgs[0];
-    const change=first>0?((last-first)/first*100).toFixed(1):'?';
+    // Stats from graph + all sources for this item
+    const tfLast=avgs[avgs.length-1],tfFirst=avgs[0];
+    const tfChange=tfFirst>0?((tfLast-tfFirst)/tfFirst*100).toFixed(1):'?';
     const min=Math.min(...avgs.filter(v=>v>0)),max=Math.max(...avgs);
+    // Collect all sources for this item
+    let srcHtml='';
+    for(const[cat,items] of Object.entries(mktData)){
+      items.filter(i=>i.item===item&&Number(i.session_avg)>0).forEach(i=>{
+        const p=Number(i.session_avg);
+        const src=i.source==='dramexchange'?'DRAMeXchange (сегодня)':'TrendForce ('+d1+')';
+        srcHtml+='<div class="src-row"><span class="src-name">'+esc(src)+'</span><span class="src-price">$'+p.toFixed(2)+'</span></div>';
+      });
+    }
     document.getElementById('mSources').innerHTML=
+      '<div class="modal-label" style="margin-top:12px">Источники</div>'+srcHtml+
       '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:12px">'+
-      '<div class="src-row"><span class="src-name">Текущая</span><span class="src-price">$'+last.toFixed(2)+'</span></div>'+
-      '<div class="src-row"><span class="src-name">Изменение</span><span class="src-price" style="color:'+(parseFloat(change)>=0?'var(--accent)':'#ef4444')+'">'+change+'%</span></div>'+
+      '<div class="src-row"><span class="src-name">За период</span><span class="src-price" style="color:'+(parseFloat(tfChange)>=0?'var(--accent)':'#ef4444')+'">'+tfChange+'%</span></div>'+
+      '<div class="src-row"><span class="src-name">TF последняя</span><span class="src-price">$'+tfLast.toFixed(2)+'</span></div>'+
       '<div class="src-row"><span class="src-name">Минимум</span><span class="src-price">$'+min.toFixed(2)+'</span></div>'+
       '<div class="src-row"><span class="src-name">Максимум</span><span class="src-price">$'+max.toFixed(2)+'</span></div></div>';
   }catch(e){
