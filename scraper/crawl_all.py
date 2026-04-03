@@ -440,22 +440,22 @@ async def crawl_chipdip(rate: float) -> list[dict]:
                 try:
                     url = f"https://www.chipdip.ru/catalog-show/ic-memory?x.page={pg}"
                     page = await session.fetch(url)
-                    items = page.css('.with-hover', all=True) or page.css('[class*=item]', all=True)
+                    items = page.css('.with-hover') or page.css('[class*=item]')
                     if not items:
                         log.info(f"ChipDip: page {pg} — no items, stopping")
                         break
                     for item in items:
-                        link = item.css('a[href*="/product/"]')
-                        price_el = item.css('[class*=price]')
-                        if not link or not price_el:
+                        links = item.css('a[href*="/product/"]')
+                        prices_els = item.css('[class*=price]')
+                        if not links or not prices_els:
                             continue
-                        pn = link.text(strip=True)
-                        href = link.attrib.get('href', '')
-                        price_rub = parse_price(price_el.text(strip=True))
+                        pn = str(links.first.text).strip()
+                        href = links.first.attrib.get('href', '')
+                        price_rub = parse_price(str(prices_els.first.text))
                         if price_rub <= 0 or not pn:
                             continue
-                        desc_el = item.css('[class*=desc]')
-                        desc = desc_el.text(strip=True) if desc_el else ''
+                        descs = item.css('[class*=desc]')
+                        desc = str(descs.first.text).strip() if descs else ''
                         price_usd = round(price_rub / rate, 4) if rate > 0 else 0
                         entries.append({
                             'chip_type': classify_type(pn, desc),
@@ -496,14 +496,14 @@ async def crawl_ebay(rate: float) -> list[dict]:
                     cards = page.css('.s-card') or []
                     count = 0
                     for card in cards:
-                        price_el = card.css('[class*=price]')
-                        title_el = card.css('[class*=title] span')
-                        if not price_el or not title_el:
+                        pe = card.css('[class*=price]')
+                        te = card.css('[class*=title] span')
+                        if not pe or not te:
                             continue
-                        title = title_el.text(strip=True)
+                        title = str(te.first.text).strip()
                         if 'shop on ebay' in title.lower():
                             continue
-                        price = parse_price(price_el.text(strip=True))
+                        price = parse_price(str(pe.first.text))
                         if price <= 0 or price > 10000:
                             continue
                         count += 1
