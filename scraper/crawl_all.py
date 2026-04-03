@@ -429,7 +429,9 @@ async def crawl_memorymarket(rate: float) -> list[dict]:
     return entries
 
 async def crawl_chipdip(rate: float) -> list[dict]:
-    """ChipDip — Scrapling StealthyFetcher for bot protection."""
+    """ChipDip — Scrapling StealthyFetcher for bot protection.
+    Note: ChipDip blocks datacenter IPs (DigitalOcean etc). Needs residential proxy.
+    """
     log.info("ChipDip: starting (stealth mode)")
     entries = []
     try:
@@ -443,8 +445,8 @@ async def crawl_chipdip(rate: float) -> list[dict]:
                         log.info(f"ChipDip: page {pg} — no items, stopping")
                         break
                     for item in items:
-                        link = item.css_first('a[href*="/product/"]')
-                        price_el = item.css_first('[class*=price]')
+                        link = item.css('a[href*="/product/"]')
+                        price_el = item.css('[class*=price]')
                         if not link or not price_el:
                             continue
                         pn = link.text(strip=True)
@@ -452,7 +454,7 @@ async def crawl_chipdip(rate: float) -> list[dict]:
                         price_rub = parse_price(price_el.text(strip=True))
                         if price_rub <= 0 or not pn:
                             continue
-                        desc_el = item.css_first('[class*=desc]')
+                        desc_el = item.css('[class*=desc]')
                         desc = desc_el.text(strip=True) if desc_el else ''
                         price_usd = round(price_rub / rate, 4) if rate > 0 else 0
                         entries.append({
@@ -491,40 +493,36 @@ async def crawl_ebay(rate: float) -> list[dict]:
                 try:
                     url = f"https://www.ebay.com/sch/i.html?_nkw={cat.replace(' ', '+')}&_sacat=0&LH_BIN=1&_pgn=1"
                     page = session.fetch(url, network_idle=True)
-                    cards = page.css('.s-item, [class*=s-card]', all=True)
-                    prices_found = []
+                    cards = page.css('.s-item', all=True) or []
+                    count = 0
                     for card in cards:
-                        price_el = card.css_first('.s-item__price, [class*=price]')
-                        title_el = card.css_first('.s-item__title, [class*=title] span')
+                        price_el = card.css('.s-item__price')
+                        title_el = card.css('.s-item__title span')
                         if not price_el or not title_el:
                             continue
                         title = title_el.text(strip=True)
                         if 'shop on ebay' in title.lower():
                             continue
                         price = parse_price(price_el.text(strip=True))
-                        if price > 0:
-                            prices_found.append((title, price))
-                    if prices_found:
-                        # Take median
-                        sorted_p = sorted(prices_found, key=lambda x: x[1])
-                        mid = len(sorted_p) // 2
-                        title, median_price = sorted_p[mid]
+                        if price <= 0 or price > 10000:
+                            continue
+                        count += 1
                         entries.append({
-                            'chip_type': classify_type(cat, ''),
-                            'part_number': cat,
-                            'description': f"eBay median ({len(prices_found)} listings)",
+                            'chip_type': classify_type(cat, title),
+                            'part_number': title[:100],
+                            'description': title[:200],
                             'brand': extract_brand(title, ''),
                             'capacity': '',
                             'source': 'ebay',
                             'distributor': 'eBay',
-                            'price_usd': round(median_price, 4),
-                            'price_rub': round(median_price * rate, 2),
+                            'price_usd': round(price, 4),
+                            'price_rub': round(price * rate, 2),
                             'price_cny': None,
                             'moq': 1,
-                            'stock': len(prices_found),
+                            'stock': None,
                             'url': url,
                         })
-                        log.info(f"eBay: '{cat}' — {len(prices_found)} listings, median ${median_price:.2f}")
+                    log.info(f"eBay: '{cat}' — {count} listings, total {len(entries)}")
                     time.sleep(3)
                 except Exception as e:
                     log.warning(f"eBay: '{cat}' error: {e}")
