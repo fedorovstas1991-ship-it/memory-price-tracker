@@ -110,6 +110,12 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
 .src-stock{font-size:11px;color:var(--text3);margin:0 8px}
 .src-link{font-size:11px;color:var(--blue);text-decoration:none;padding:3px 8px;border:1px solid rgba(59,130,246,0.3);border-radius:4px}
 
+/* ── Cap Panel ── */
+.cap-group-title{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;padding:4px 12px 2px}
+.cap-chips{display:flex;gap:4px;flex-wrap:wrap;padding:0 12px 8px}
+.cap-chip{padding:5px 10px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg3);color:var(--text2);font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap}
+.cap-chip.on{background:rgba(16,185,129,0.15);border-color:rgba(16,185,129,0.4);color:var(--accent)}
+
 /* ── Loader bar ── */
 #loader{position:fixed;top:0;left:0;width:100%;height:3px;z-index:9999;pointer-events:none;opacity:0;transition:opacity 0.15s}
 #loader.active{opacity:1}
@@ -148,6 +154,8 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
     <input class="f-input" id="minStock" type="number" placeholder="Мин. сток" oninput="debouncedLoad()" style="flex:0 0 90px;-moz-appearance:textfield">
     <button class="btn on" id="bSortAsc" onclick="setSort('price_usd',true)">$ ↑</button>
     <button class="btn" id="bSortDesc" onclick="setSort('price_usd',false)">$ ↓</button>
+    <button class="btn" id="bStockAsc" onclick="setSort('stock',true)">📦↑</button>
+    <button class="btn" id="bStockDesc" onclick="setSort('stock',false)">📦↓</button>
   </div>
   <div class="f-row">
     <select class="f-sel" id="selType" onfocus="selSave(this)" onchange="selApply(this)" onblur="selApply(this)"><option value="">Все типы</option></select>
@@ -155,8 +163,15 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
   </div>
   <div class="f-row">
     <select class="f-sel" id="selSource" onfocus="selSave(this)" onchange="selApply(this)" onblur="selApply(this)"><option value="">Все источники</option></select>
-    <input class="f-input" id="selCap" list="selCapDL" placeholder="Все объёмы" onfocus="selSave(this)" onblur="selApply(this)" oninput="capPick(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
-    <datalist id="selCapDL"></datalist>
+    <button class="f-sel" id="capBtn" onclick="toggleCapPanel()" style="text-align:left;cursor:pointer">Все объёмы</button>
+  </div>
+</div>
+
+<div id="capPanel" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin:0 16px 8px;padding:8px 0 0">
+  <div id="capGroups"></div>
+  <div style="display:flex;gap:6px;justify-content:flex-end;padding:8px 12px 8px">
+    <button class="btn" onclick="clearCapFilter()">Сбросить</button>
+    <button class="btn on" onclick="applyCapFilter()">Применить</button>
   </div>
 </div>
 
@@ -185,7 +200,10 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
 
 <div class="list-hd">
   <div class="list-hd-title">Результаты</div>
-  <div class="list-count" id="listCount">--</div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn" id="exportBtn" onclick="exportCSV()" style="font-size:10px;padding:4px 8px">CSV ↓</button>
+    <div class="list-count" id="listCount">--</div>
+  </div>
 </div>
 <div class="cards" id="cards"></div>
 <button class="load-more" id="loadMore" onclick="loadMore()" style="display:none">Загрузить ещё</button>
@@ -243,6 +261,83 @@ let _selSnap={};
 let allTypes=[],allBrands=[],allSources=[];
 let lastMeta=null;
 
+// Capacity multi-select state
+let _selectedCaps=[];
+let _capOptions=[];
+
+const CAP_GROUPS=[
+  {key:'Kbit',label:'Kbit (килобит)',match:/K(?:bit|b)$/},
+  {key:'Mbit',label:'Mbit (мегабит)',match:/M(?:bit|b)$/},
+  {key:'Gbit',label:'Gbit (гигабит)',match:/G(?:bit|b)$/},
+  {key:'Tbit',label:'Tbit (терабит)',match:/T(?:bit|b)$/},
+  {key:'KB',label:'KB (килобайт)',match:/KB$/},
+  {key:'MB',label:'MB (мегабайт)',match:/MB$/},
+  {key:'GB',label:'GB (гигабайт)',match:/GB$/},
+  {key:'TB',label:'TB (терабайт)',match:/TB$/},
+];
+
+function toggleCapPanel(){
+  const panel=document.getElementById('capPanel');
+  const isOpen=panel.style.display!=='none';
+  panel.style.display=isOpen?'none':'block';
+  if(!isOpen)renderCapChips();
+}
+
+function renderCapChips(){
+  const container=document.getElementById('capGroups');
+  let html='';
+  for(const grp of CAP_GROUPS){
+    const items=_capOptions.filter(o=>grp.match.test(o.val));
+    if(!items.length)continue;
+    items.sort((a,b)=>capSortToBits(a.val)-capSortToBits(b.val));
+    html+='<div class="cap-group-title">'+grp.label+'</div><div class="cap-chips">';
+    for(const o of items){
+      const sel=_selectedCaps.includes(o.val);
+      html+='<button class="cap-chip'+(sel?' on':'')+'" onclick="event.stopPropagation();toggleCapChip(\''+esc(o.val)+'\')">'+esc(o.val)+(o.count?' ('+o.count+')':'')+'</button>';
+    }
+    html+='</div>';
+  }
+  // Any items that don't match a group
+  const ungrouped=_capOptions.filter(o=>!CAP_GROUPS.some(g=>g.match.test(o.val)));
+  if(ungrouped.length){
+    ungrouped.sort((a,b)=>capSortToBits(a.val)-capSortToBits(b.val));
+    html+='<div class="cap-group-title">Другие</div><div class="cap-chips">';
+    for(const o of ungrouped){
+      const sel=_selectedCaps.includes(o.val);
+      html+='<button class="cap-chip'+(sel?' on':'')+'" onclick="event.stopPropagation();toggleCapChip(\''+esc(o.val)+'\')">'+esc(o.val)+(o.count?' ('+o.count+')':'')+'</button>';
+    }
+    html+='</div>';
+  }
+  container.innerHTML=html;
+}
+
+function toggleCapChip(val){
+  const idx=_selectedCaps.indexOf(val);
+  if(idx>=0)_selectedCaps.splice(idx,1);
+  else _selectedCaps.push(val);
+  renderCapChips();
+}
+
+function applyCapFilter(){
+  document.getElementById('capPanel').style.display='none';
+  updateCapBtn();
+  loadPrices();
+}
+
+function clearCapFilter(){
+  _selectedCaps=[];
+  document.getElementById('capPanel').style.display='none';
+  updateCapBtn();
+  loadPrices();
+}
+
+function updateCapBtn(){
+  const btn=document.getElementById('capBtn');
+  if(_selectedCaps.length===0)btn.textContent='Все объёмы';
+  else if(_selectedCaps.length===1)btn.textContent=_selectedCaps[0];
+  else btn.textContent=_selectedCaps.length+' объёмов';
+}
+
 Chart.defaults.color='#71717a';
 Chart.defaults.borderColor='rgba(16,185,129,0.06)';
 Chart.defaults.font.family="'Inter',system-ui,sans-serif";
@@ -262,17 +357,6 @@ function selApply(el){
     loadPrices();
   },50);
 }
-// Capacity input: fire immediately ONLY when user picks a datalist option.
-// Partial typing waits for blur or Enter.
-function capPick(el){
-  if(suppressSelectEvents)return;
-  const dl=document.getElementById('selCapDL');
-  if(!dl)return;
-  const v=el.value;
-  for(let i=0;i<dl.options.length;i++){
-    if(dl.options[i].value===v){_selSnap[el.id]=v;loadPrices();return;}
-  }
-}
 
 function toggleGroup(g){
   flags[g]=!flags[g];
@@ -288,8 +372,10 @@ function toggleStock(){
 
 function setSort(col,asc){
   sortCol=col;sortAsc=asc;
-  document.getElementById('bSortAsc').className='btn'+(asc?' on':'');
-  document.getElementById('bSortDesc').className='btn'+(!asc?' on':'');
+  document.getElementById('bSortAsc').className='btn'+(col==='price_usd'&&asc?' on':'');
+  document.getElementById('bSortDesc').className='btn'+(col==='price_usd'&&!asc?' on':'');
+  document.getElementById('bStockAsc').className='btn'+(col==='stock'&&asc?' on':'');
+  document.getElementById('bStockDesc').className='btn'+(col==='stock'&&!asc?' on':'');
   loadPrices();
 }
 
@@ -298,7 +384,9 @@ function setSort(col,asc){
 function resetFilters(){
   document.getElementById('searchAll').value='';
   document.getElementById('minStock').value='';
-  document.getElementById('selCap').value='';
+  _selectedCaps=[];
+  document.getElementById('capBtn').textContent='Все объёмы';
+  document.getElementById('capPanel').style.display='none';
   suppressSelectEvents=true;
   document.getElementById('selType').value='';
   document.getElementById('selBrand').value='';
@@ -309,6 +397,11 @@ function resetFilters(){
   document.getElementById('bFlash').classList.remove('on');
   document.getElementById('bRam').classList.remove('on');
   document.getElementById('bStock').classList.remove('on');
+  sortCol='price_usd';sortAsc=true;
+  document.getElementById('bSortAsc').className='btn on';
+  document.getElementById('bSortDesc').className='btn';
+  document.getElementById('bStockAsc').className='btn';
+  document.getElementById('bStockDesc').className='btn';
   loadPrices();
 }
 
@@ -368,8 +461,7 @@ function buildQuery(offset,limit){
   if(types.length>0)params.set('type',types.join(','));
   if(fb)params.set('brand',fb);
   if(fs)params.set('source',fs);
-  const fc=(document.getElementById('selCap')?.value||'').trim();
-  if(fc)params.set('capacity',fc);
+  if(_selectedCaps.length>0)params.set('capacity',_selectedCaps[0]);
   // Stock filters
   if(flags.stock)params.set('in_stock','true');
   const minS=parseInt(document.getElementById('minStock')?.value)||0;
@@ -418,13 +510,11 @@ async function loadPrices(){
           selSource.innerHTML='<option value="">Все источники</option>'+fo.sources.map(s=>'<option value="'+s.source+'">'+s.source+' ('+s.count+')</option>').join('');
           selSource.value=fo.sources.some(s=>s.source===prevSource)?prevSource:'';
           if(fo.capacities){
-            const selCap=document.getElementById('selCap');
-            const capDL=document.getElementById('selCapDL');
-            const prevCap=selCap.value;
             const sortedCaps=fo.capacities.sort((a,b)=>capSortToBits(a.val)-capSortToBits(b.val));
-            capDL.innerHTML=sortedCaps.map(c=>'<option value="'+c.val+'" label="('+c.count+')"></option>').join('');
-            // Keep typed value to match market-tab behavior (free-form + suggestions).
-            selCap.value=prevCap;
+            _capOptions=sortedCaps;
+            updateCapBtn();
+            _selectedCaps=_selectedCaps.filter(c=>sortedCaps.some(s=>s.val===c));
+            if(document.getElementById('capPanel').style.display!=='none')renderCapChips();
           }
         }finally{
           suppressSelectEvents=false;
@@ -461,6 +551,30 @@ async function loadMore(){
     renderCards();
     if(more.length<PAGE_SIZE)btn.style.display='none';
   }catch(e){btn.textContent='Ошибка, попробуйте ещё';}
+}
+
+function exportCSV(){
+  // Build URL with current filters → open server-side CSV endpoint in browser
+  const apiBase=API_URL||(location.origin+'/api/');
+  const params=new URLSearchParams();
+  const q=(document.getElementById('searchAll')?.value||'').trim();
+  if(q)params.set('search',q);
+  const types=getActiveTypes();
+  if(types.length>0)params.set('type',types.join(','));
+  const fb=document.getElementById('selBrand')?.value||'';
+  if(fb)params.set('brand',fb);
+  const fs=document.getElementById('selSource')?.value||'';
+  if(fs)params.set('source',fs);
+  if(_selectedCaps.length>0)params.set('capacity',_selectedCaps[0]);
+  if(flags.stock)params.set('in_stock','true');
+  const minS=parseInt(document.getElementById('minStock')?.value)||0;
+  if(minS>0)params.set('min_stock',String(minS));
+  params.set('sort',sortCol);
+  params.set('order',sortAsc?'asc':'desc');
+  const url=apiBase+'export?'+params.toString();
+  // Telegram WebView: openLink opens in system browser which handles downloads
+  if(tg&&tg.openLink)tg.openLink(url);
+  else window.open(url,'_blank');
 }
 
 
@@ -520,7 +634,7 @@ function updateKpis(meta){
   if(fb)parts.push(fb);
   const fs=document.getElementById('selSource')?.value;
   if(fs)parts.push(fs);
-  const fc=(document.getElementById('selCap')?.value||'').trim();
+  const fc=_selectedCaps.length>0?_selectedCaps.join(', '):'';
   if(fc)parts.push(fc);
   const q=(document.getElementById('searchAll')?.value||'').trim();
   if(q)parts.push('"'+q+'"');
@@ -628,8 +742,7 @@ async function renderChart(chartMeta){
     if(_fb)dealsParams.set('brand',_fb);
     const _fs=document.getElementById('selSource')?.value||'';
     if(_fs)dealsParams.set('source',_fs);
-    const _fc=(document.getElementById('selCap')?.value||'').trim();
-    if(_fc)dealsParams.set('capacity',_fc);
+    if(_selectedCaps.length>0)dealsParams.set('capacity',_selectedCaps[0]);
     const _fq=(document.getElementById('searchAll')?.value||'').trim();
     if(_fq)dealsParams.set('search',_fq);
     if(flags.stock)dealsParams.set('in_stock','true');
@@ -826,6 +939,7 @@ function showTab(tab){
   const show=tab==='prices';
   document.querySelectorAll('.kpis,.filters,.list-hd,.cards,.load-more').forEach(el=>el.style.display=show?'':'none');
   document.getElementById('chartsSection').style.display=show?'':'none';
+  if(!show)document.getElementById('capPanel').style.display='none';
   document.getElementById('marketTab').style.display=tab==='market'?'block':'none';
   if(tab==='market'&&!window.__marketLoaded)loadMarket();
 }
@@ -1065,7 +1179,7 @@ async function init(){
       document.getElementById('selBrand').innerHTML='<option value="">Все бренды</option>'+allBrands.map(v=>'<option value="'+v.name+'">'+v.name+'</option>').join('');
       document.getElementById('selSource').innerHTML='<option value="">Все источники</option>'+allSources.map(v=>'<option value="'+v.name+'">'+v.name+'</option>').join('');
       const sortedCaps=(caps||[]).map(c=>c.val).sort((a,b)=>capSortToBits(a)-capSortToBits(b));
-      document.getElementById('selCapDL').innerHTML=sortedCaps.map(c=>'<option value="'+c+'"></option>').join('');
+      _capOptions=sortedCaps.map(c=>({val:c,count:0}));
     }finally{
       suppressSelectEvents=false;
     }
@@ -1077,6 +1191,15 @@ async function init(){
   }
 }
 init();
+
+// Close cap panel when tapping outside
+document.addEventListener('click',function(e){
+  const panel=document.getElementById('capPanel');
+  const btn=document.getElementById('capBtn');
+  if(panel.style.display!=='none'&&!panel.contains(e.target)&&e.target!==btn){
+    panel.style.display='none';
+  }
+});
 </script>
 </body>
 </html>

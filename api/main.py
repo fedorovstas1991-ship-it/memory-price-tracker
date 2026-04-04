@@ -10,7 +10,7 @@ from typing import Literal, Optional
 import asyncpg
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.capacity import SQL_CAPACITY_REGEX, normalize_capacity_literal
 
@@ -394,6 +394,111 @@ async def get_sources():
     async with pool.acquire() as conn:
         rows = await conn.fetch(query)
     return SafeJSONResponse(content=[dict(r) for r in rows])
+
+
+@app.get("/api/export")
+async def export_csv(
+    type: Optional[str] = Query(None),
+    brand: Optional[str] = Query(None),
+    capacity: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    in_stock: Optional[bool] = Query(None),
+    min_stock: Optional[int] = Query(None, ge=0),
+    sort: str = Query("price_usd"),
+    order: str = Query("asc"),
+):
+    """Export filtered prices as CSV file."""
+    conditions = []
+    params = []
+    idx = 1
+
+    if type is not None:
+        type_list = [t.strip() for t in type.split(",") if t.strip()]
+        if len(type_list) == 1:
+            conditions.append(f"chip_type = ${idx}")
+            params.append(type_list[0])
+            idx += 1
+        elif type_list:
+            placeholders = ", ".join(f"${idx + i}" for i in range(len(type_list)))
+            conditions.append(f"chip_type IN ({placeholders})")
+            params.extend(type_list)
+            idx += len(type_list)
+
+    if brand is not None:
+        conditions.append(f"brand = ${idx}")
+        params.append(brand)
+        idx += 1
+
+    if capacity is not None:
+        normalized_capacity = normalize_capacity_literal(capacity)
+        if normalized_capacity:
+            conditions.append(f"{_capacity_sql_expr()} = ${idx}")
+            params.append(normalized_capacity)
+            idx += 1
+        else:
+            cap_pattern = re.sub(r"(?<=\d)(?=[A-Za-z])", lambda _: r"\s*", capacity)
+            conditions.append(f"(description ~ ${idx} OR part_number ~ ${idx})")
+            params.append(f"(^|[^0-9A-Za-z]){cap_pattern}($|[^A-Za-z0-9])")
+            idx += 1
+
+    if source is not None:
+        conditions.append(f"source = ${idx}")
+        params.append(source)
+        idx += 1
+
+    if search is not None:
+        conditions.append(
+            f"(part_number ILIKE ${idx} OR description ILIKE ${idx} OR brand ILIKE ${idx})"
+        )
+        params.append(f"%{search}%")
+        idx += 1
+
+    if in_stock is True:
+        conditions.append("stock > 0")
+
+    if min_stock is not None and min_stock > 0:
+        conditions.append(f"stock >= ${idx}")
+        params.append(min_stock)
+        idx += 1
+
+    where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    order_clause = _safe_sort(sort, order)
+
+    query = f"""
+        SELECT part_number, chip_type, brand, description, capacity,
+               source, price_usd, price_rub, stock, moq, url
+        FROM prices {where_clause}
+        ORDER BY {order_clause}
+        LIMIT 100000
+    """
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(query, *params)
+
+    import io
+    import csv
+    output = io.StringIO()
+    output.write("\ufeff")  # BOM for Excel
+    writer = csv.writer(output)
+    writer.writerow(["Part Number", "Type", "Brand", "Description", "Capacity",
+                     "Source", "Price USD", "Price RUB", "Stock", "MOQ", "URL"])
+    for r in rows:
+        writer.writerow([
+            r["part_number"], r["chip_type"], r["brand"], r["description"],
+            r["capacity"], r["source"],
+            float(r["price_usd"]) if r["price_usd"] else "",
+            float(r["price_rub"]) if r["price_rub"] else "",
+            r["stock"] or "", r["moq"] or "", r["url"] or "",
+        ])
+
+    output.seek(0)
+    today = date.today().isoformat()
+    return StreamingResponse(
+        output,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="memory-prices-{today}.csv"'},
+    )
 
 
 @app.get("/api/stats")
