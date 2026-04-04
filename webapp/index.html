@@ -42,8 +42,8 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
 .btn.on{background:rgba(16,185,129,0.15);border-color:rgba(16,185,129,0.4);color:var(--accent)}
 
 /* ── Chart ── */
-.chart-wrap{margin:0 16px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px}
-.chart-title{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px}
+.chart-wrap{margin:0 16px 12px;background:var(--bg2);border:1px solid rgba(16,185,129,0.15);border-radius:var(--r);padding:12px;box-shadow:0 0 20px rgba(16,185,129,0.03)}
+.chart-title{font-size:12px;font-weight:600;color:rgba(16,185,129,0.7);margin-bottom:8px}
 .chart-h{height:160px;position:relative}
 
 /* ── Cards ── */
@@ -57,6 +57,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
 .card-chip{font-size:14px;font-weight:600;color:var(--text);word-break:break-all;flex:1;margin-right:8px}
 .card-type{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.03em;flex-shrink:0}
 .card-mid{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.card-desc{font-size:11px;color:var(--text2);margin-bottom:6px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .card-tag{font-size:11px;color:var(--text3);background:var(--bg3);border-radius:3px;padding:1px 5px}
 .card-bot{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .card-price{font-size:16px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace}
@@ -108,9 +109,16 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
 .src-row:first-child .src-price{color:var(--accent);text-shadow:0 0 10px rgba(16,185,129,0.4)}
 .src-stock{font-size:11px;color:var(--text3);margin:0 8px}
 .src-link{font-size:11px;color:var(--blue);text-decoration:none;padding:3px 8px;border:1px solid rgba(59,130,246,0.3);border-radius:4px}
+
+/* ── Loader bar ── */
+#loader{position:fixed;top:0;left:0;width:100%;height:3px;z-index:9999;pointer-events:none;opacity:0;transition:opacity 0.15s}
+#loader.active{opacity:1}
+#loader::after{content:'';display:block;height:100%;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:loader-slide 1s linear infinite}
+@keyframes loader-slide{from{transform:translateX(-100%)}to{transform:translateX(200%)}}
 </style>
 </head>
 <body>
+<div id="loader"></div>
 
 <div class="header">
   <h1><span>Memory</span> Prices</h1>
@@ -130,36 +138,48 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
 
 <div class="filters">
   <div class="f-row">
-    <input class="f-input" id="searchAll" placeholder="Поиск по всему..." oninput="page=0;render()">
-    <input class="f-input" id="searchChip" placeholder="Парт-номер..." oninput="page=0;render()">
+    <input class="f-input" id="searchAll" placeholder="Поиск по всему..." oninput="debouncedLoad()">
+    <button class="btn" id="bReset" onclick="resetFilters()" style="flex:0 0 auto;font-size:11px;padding:8px 10px" title="Сбросить фильтры">✕</button>
   </div>
   <div class="f-row">
-    <button class="btn" id="bFlash" onclick="toggle('flash')">Flash</button>
-    <button class="btn" id="bRam" onclick="toggle('ram')">RAM</button>
-    <button class="btn" id="bStock" onclick="toggle('stock')">Со стоком</button>
-    <input class="f-input" id="minStock" type="number" placeholder="Мин. сток" oninput="page=0;render()" style="flex:0 0 90px;-moz-appearance:textfield">
+    <button class="btn" id="bFlash" onclick="toggleGroup('flash')">Flash</button>
+    <button class="btn" id="bRam" onclick="toggleGroup('ram')">RAM</button>
+    <button class="btn" id="bStock" onclick="toggleStock()">Со стоком</button>
+    <input class="f-input" id="minStock" type="number" placeholder="Мин. сток" oninput="debouncedLoad()" style="flex:0 0 90px;-moz-appearance:textfield">
     <button class="btn on" id="bSortAsc" onclick="setSort('price_usd',true)">$ ↑</button>
     <button class="btn" id="bSortDesc" onclick="setSort('price_usd',false)">$ ↓</button>
   </div>
   <div class="f-row">
-    <select class="f-sel" id="selType" onchange="page=0;render()"><option value="">Все типы</option></select>
-    <select class="f-sel" id="selBrand" onchange="page=0;render()"><option value="">Все бренды</option></select>
+    <select class="f-sel" id="selType" onfocus="selSave(this)" onchange="selApply(this)" onblur="selApply(this)"><option value="">Все типы</option></select>
+    <select class="f-sel" id="selBrand" onfocus="selSave(this)" onchange="selApply(this)" onblur="selApply(this)"><option value="">Все бренды</option></select>
   </div>
   <div class="f-row">
-    <select class="f-sel" id="selSource" onchange="page=0;render()"><option value="">Все источники</option></select>
-    <input class="f-input" id="selCap" list="capDL" placeholder="Объём..." oninput="page=0;render()" style="flex:1">
-    <datalist id="capDL"></datalist>
+    <select class="f-sel" id="selSource" onfocus="selSave(this)" onchange="selApply(this)" onblur="selApply(this)"><option value="">Все источники</option></select>
+    <input class="f-input" id="selCap" list="selCapDL" placeholder="Все объёмы" onfocus="selSave(this)" onblur="selApply(this)" oninput="capPick(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+    <datalist id="selCapDL"></datalist>
   </div>
 </div>
 
-<div style="display:flex;gap:8px;padding:0 12px;margin-bottom:12px;overflow-x:auto">
-  <div class="chart-wrap" style="flex:1;min-width:0;margin:0">
-    <div class="chart-title">Средняя цена (USD)</div>
-    <div class="chart-h"><canvas id="chartSrc"></canvas></div>
+<div id="chartsSection" style="padding:0 12px;margin-bottom:12px">
+  <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:8px">
+    <button class="btn" id="chartToggle" onclick="toggleCharts()" style="font-size:10px">Свернуть</button>
   </div>
-  <div class="chart-wrap" style="flex:1;min-width:0;margin:0">
-    <div class="chart-title">Сток по источникам</div>
-    <div class="chart-h"><canvas id="chartStock"></canvas></div>
+  <div id="chartsContent">
+    <div class="chart-wrap" style="margin:0 0 8px">
+      <div class="chart-title" style="color:rgba(16,185,129,0.7)">Цены по объёмам (USD)</div>
+      <div class="chart-h" style="height:220px"><canvas id="chartCapPrice"></canvas></div>
+      <button class="btn" id="expandPriceChart" onclick="expandChart('price')" style="width:100%;margin-top:6px;font-size:11px;display:none">Показать все</button>
+    </div>
+    <div class="chart-wrap" style="margin:0 0 8px">
+      <div class="chart-title" id="stockChartTitle" style="color:rgba(16,185,129,0.7)">Стоки по объёмам</div>
+      <div class="chart-h" style="height:220px"><canvas id="chartCapStock"></canvas></div>
+      <button class="btn" id="expandStockChart" onclick="expandChart('stock')" style="width:100%;margin-top:6px;font-size:11px;display:none">Показать все</button>
+    </div>
+    <div class="chart-wrap" style="margin:0">
+      <div class="chart-title" style="color:rgba(16,185,129,0.7)">Лучшие сделки (скидка vs история, сток ≥100)</div>
+      <div class="chart-h" style="height:220px"><canvas id="chartDeals"></canvas></div>
+      <button class="btn" id="expandDealsChart" onclick="expandChart('deals')" style="width:100%;margin-top:6px;font-size:11px;display:none">Показать все</button>
+    </div>
   </div>
 </div>
 
@@ -168,14 +188,15 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
   <div class="list-count" id="listCount">--</div>
 </div>
 <div class="cards" id="cards"></div>
-<button class="load-more" id="loadMore" onclick="page++;renderCards()" style="display:none">Загрузить ещё 25</button>
+<button class="load-more" id="loadMore" onclick="loadMore()" style="display:none">Загрузить ещё</button>
 
 <div id="pricesTab"></div>
 <div id="marketTab">
   <div class="mkt-filters">
     <input class="f-input" id="mktSearch" placeholder="Поиск (DDR4, Flash, MicroSD...)" oninput="mktSearch=this.value;renderMktCards()">
     <div class="f-row">
-      <select class="f-sel" id="mktCap" onchange="renderMktCards()"><option value="">Все объёмы</option></select>
+      <input class="f-input" id="mktCap" list="mktCapDL" placeholder="Все объёмы" oninput="renderMktCards()">
+      <datalist id="mktCapDL"></datalist>
     </div>
     <div class="mkt-cats" id="mktCats"></div>
     <div style="font-size:10px;color:var(--text3);padding:0 4px">Биржевые бенчмарки — эталонные цены на типовые конфигурации чипов. Источники: DRAMeXchange, TrendForce.</div>
@@ -200,158 +221,463 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
 
 <script>
 const API_URL='';
-const PAGE_SIZE=25;
-const FLASH=['eMMC','UFS','NAND Flash','NOR Flash','NAND','NOR'];
-const RAM=['DDR3','DDR4','DDR5','LPDDR4','LPDDR4X','LPDDR5','SRAM','SDRAM','DRAM'];
+const PAGE_SIZE=50;
 
 const tg=window.Telegram?.WebApp;
 if(tg){tg.ready();tg.expand();try{tg.setHeaderColor('#09090b');tg.setBackgroundColor('#09090b')}catch(e){}}
 
-let allPrices=[],filtered=[],page=0;
+const FLASH_TYPES=['eMMC','UFS','NAND Flash','NOR Flash','NAND','NOR'];
+const RAM_TYPES=['DDR3','DDR4','DDR5','LPDDR4','LPDDR4X','LPDDR5','SRAM','SDRAM','DRAM'];
+
+let allPrices=[],totalCount=0,currentOffset=0;
 let sortCol='price_usd',sortAsc=true;
 let flags={flash:false,ram:false,stock:false};
-let chart=null,detailChart=null;
+let detailChart=null;
+let chartCapPrice=null, chartCapStock=null, chartDeals=null;
+let chartsVisible=true;
+let _debounceTimer=null;
+let _loadingPrices=false;
+let _pendingLoad=false;
+let suppressSelectEvents=false;
+let _selSnap={};
+let allTypes=[],allBrands=[],allSources=[];
+let lastMeta=null;
 
 Chart.defaults.color='#71717a';
-Chart.defaults.borderColor='#27272a';
+Chart.defaults.borderColor='rgba(16,185,129,0.06)';
 Chart.defaults.font.family="'Inter',system-ui,sans-serif";
 
-function toggle(k){
-  flags[k]=!flags[k];
-  document.getElementById('b'+k[0].toUpperCase()+k.slice(1)).classList.toggle('on',flags[k]);
-  page=0;render();
+function debouncedLoad(){clearTimeout(_debounceTimer);_debounceTimer=setTimeout(()=>loadPrices(),300);}
+
+// Filters: save value on focus, fire loadPrices on blur only if changed.
+// 50ms delay on blur ensures `change` event has updated el.value first
+// (on iOS Telegram WebView, blur can fire before change).
+function selSave(el){_selSnap[el.id]=el.value;}
+function selApply(el){
+  if(suppressSelectEvents)return;
+  setTimeout(()=>{
+    if(suppressSelectEvents)return;
+    if(el.value===_selSnap[el.id])return;
+    _selSnap[el.id]=el.value;
+    loadPrices();
+  },50);
+}
+// Capacity input: fire immediately ONLY when user picks a datalist option.
+// Partial typing waits for blur or Enter.
+function capPick(el){
+  if(suppressSelectEvents)return;
+  const dl=document.getElementById('selCapDL');
+  if(!dl)return;
+  const v=el.value;
+  for(let i=0;i<dl.options.length;i++){
+    if(dl.options[i].value===v){_selSnap[el.id]=v;loadPrices();return;}
+  }
+}
+
+function toggleGroup(g){
+  flags[g]=!flags[g];
+  document.getElementById('b'+g[0].toUpperCase()+g.slice(1)).classList.toggle('on',flags[g]);
+  loadPrices();
+}
+
+function toggleStock(){
+  flags.stock=!flags.stock;
+  document.getElementById('bStock').classList.toggle('on',flags.stock);
+  loadPrices();
 }
 
 function setSort(col,asc){
   sortCol=col;sortAsc=asc;
   document.getElementById('bSortAsc').className='btn'+(asc?' on':'');
   document.getElementById('bSortDesc').className='btn'+(!asc?' on':'');
-  page=0;render();
+  loadPrices();
 }
 
-function getFiltered(){
-  let d=allPrices;
-  if(flags.flash||flags.ram){
-    d=d.filter(r=>{
-      const iF=FLASH.some(f=>r.type.toLowerCase().includes(f.toLowerCase()));
-      const iR=RAM.some(f=>r.type.toLowerCase()===f.toLowerCase());
-      if(flags.flash&&flags.ram)return iF||iR;
-      if(flags.flash)return iF;
-      return iR;
-    });
+
+
+function resetFilters(){
+  document.getElementById('searchAll').value='';
+  document.getElementById('minStock').value='';
+  document.getElementById('selCap').value='';
+  suppressSelectEvents=true;
+  document.getElementById('selType').value='';
+  document.getElementById('selBrand').value='';
+  document.getElementById('selSource').value='';
+  suppressSelectEvents=false;
+  _selSnap={};
+  flags={flash:false,ram:false,stock:false};
+  document.getElementById('bFlash').classList.remove('on');
+  document.getElementById('bRam').classList.remove('on');
+  document.getElementById('bStock').classList.remove('on');
+  loadPrices();
+}
+
+function toggleCharts(){
+  chartsVisible=!chartsVisible;
+  document.getElementById('chartsContent').style.display=chartsVisible?'':'none';
+  document.getElementById('chartToggle').textContent=chartsVisible?'Свернуть':'Развернуть';
+}
+function expandChart(type){
+  const exp=window.__chartExpanded||{};
+  exp[type]=!exp[type];
+  window.__chartExpanded=exp;
+  const btn=document.getElementById('expand'+(type==='price'?'Price':type==='stock'?'Stock':'Deals')+'Chart');
+  if(type==='price'){
+    const data=exp.price?window.__fullPriceData:window.__fullPriceData.slice(0,5);
+    btn.textContent=exp.price?'Свернуть':'Показать все ('+window.__fullPriceData.length+')';
+    if(chartCapPrice)chartCapPrice.destroy();
+    document.getElementById('chartCapPrice').parentElement.style.height=Math.max(150,data.length*32+60)+'px';
+    const colors=data.map((_,i)=>{const t=i/Math.max(data.length-1,1);return'rgba('+Math.round(16+43*t)+','+Math.round(185-55*t)+','+Math.round(129+117*t)+',0.75)';});
+    chartCapPrice=new Chart(document.getElementById('chartCapPrice'),{type:'bar',data:{labels:data.map(e=>e.capacity),datasets:[{data:data.map(e=>e.avg_price),backgroundColor:colors,borderColor:colors.map(c=>c.replace('0.75','0.5')),borderWidth:1,borderRadius:6,barThickness:22}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.raw.toFixed(2)+' ('+data[c.dataIndex].count+' поз.)'}}},scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{callback:v=>'$'+v,font:{size:11},color:'#10b981'}},y:{grid:{display:false},ticks:{font:{size:12}}}}}});
+  }else if(type==='stock'){
+    const data=exp.stock?window.__fullStockData:window.__fullStockData.slice(0,5);
+    btn.textContent=exp.stock?'Свернуть':'Показать все ('+window.__fullStockData.length+')';
+    if(chartCapStock)chartCapStock.destroy();
+    document.getElementById('chartCapStock').parentElement.style.height=Math.max(150,data.length*32+60)+'px';
+    const colors=data.map((_,i)=>{const t=i/Math.max(data.length-1,1);return'rgba('+Math.round(59-53*t)+','+Math.round(130+52*t)+','+Math.round(246-34*t)+',0.7)';});
+    chartCapStock=new Chart(document.getElementById('chartCapStock'),{type:'bar',data:{labels:data.map(e=>e.capacity),datasets:[{data:data.map(e=>e.total_stock),backgroundColor:colors,borderColor:colors.map(c=>c.replace('0.7','0.5')),borderWidth:1,borderRadius:6,barThickness:22}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const d=data[c.dataIndex];return d.total_stock.toLocaleString()+' шт ('+d.positions+' поз.)'}}}},scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{callback:v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3|0)+'K':v,font:{size:11}}},y:{grid:{display:false},ticks:{font:{size:12}}}}}});
+  }else if(type==='deals'){
+    const data=exp.deals?window.__fullDealsData:window.__fullDealsData.slice(0,5);
+    window.__dealsData=data;
+    btn.textContent=exp.deals?'Свернуть':'Показать все ('+window.__fullDealsData.length+')';
+    if(chartDeals)chartDeals.destroy();
+    document.getElementById('chartDeals').parentElement.style.height=Math.max(150,data.length*28+60)+'px';
+    chartDeals=new Chart(document.getElementById('chartDeals'),{type:'bar',data:{labels:data.map(d=>(d.capacity?d.capacity+' ':'')+d.part_number.slice(0,18)),datasets:[{data:data.map(d=>d.discount_pct),backgroundColor:data.map(d=>d.discount_pct>=30?'rgba(16,185,129,0.7)':d.discount_pct>=20?'rgba(59,130,246,0.6)':'rgba(245,158,11,0.5)'),borderColor:data.map(d=>d.discount_pct>=30?'rgba(52,211,153,0.8)':d.discount_pct>=20?'rgba(96,165,250,0.8)':'rgba(251,191,36,0.8)'),borderWidth:1,borderRadius:6,barThickness:18}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(els.length>0){const d=data[els[0].index];if(d)openDeal(d);}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const d=data[c.dataIndex];return'-'+d.discount_pct+'% | $'+d.price_usd.toFixed(2)+' (было $'+d.avg_hist_price.toFixed(2)+') | '+d.stock.toLocaleString()+' шт'}}}},scales:{x:{grid:{display:false},ticks:{callback:v=>v+'%',font:{size:11}}},y:{grid:{display:false},ticks:{font:{size:11}}}},onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default';}}});
   }
+}
+
+function getActiveTypes(){
+  // If a specific type is selected in dropdown, use that
+  const ft=document.getElementById('selType')?.value||'';
+  if(ft)return[ft];
+  // Otherwise check Flash/RAM group buttons
+  let types=[];
+  if(flags.flash)types=types.concat(FLASH_TYPES);
+  if(flags.ram)types=types.concat(RAM_TYPES);
+  return types;
+}
+
+function buildQuery(offset,limit){
+  const params=new URLSearchParams();
+  const q=(document.getElementById('searchAll')?.value||'').trim();
+  const fb=document.getElementById('selBrand')?.value||'';
+  const fs=document.getElementById('selSource')?.value||'';
+  if(q)params.set('search',q);
+  // Type filter: specific dropdown OR group buttons
+  const types=getActiveTypes();
+  if(types.length>0)params.set('type',types.join(','));
+  if(fb)params.set('brand',fb);
+  if(fs)params.set('source',fs);
+  const fc=(document.getElementById('selCap')?.value||'').trim();
+  if(fc)params.set('capacity',fc);
+  // Stock filters
+  if(flags.stock)params.set('in_stock','true');
   const minS=parseInt(document.getElementById('minStock')?.value)||0;
-  if(flags.stock)d=d.filter(r=>r.stock>0);
-  if(minS>0)d=d.filter(r=>r.stock>=minS);
-  const ft=document.getElementById('selType').value;
-  const fb=document.getElementById('selBrand').value;
-  const fs=document.getElementById('selSource').value;
-  const fc=document.getElementById('selCap').value.trim().toLowerCase();
-  if(ft)d=d.filter(r=>r.type===ft);
-  if(fb)d=d.filter(r=>r.brand===fb);
-  if(fs)d=d.filter(r=>r.source===fs);
-  if(fc)d=d.filter(r=>(r.capacity||'').toLowerCase().includes(fc));
-  const qa=(document.getElementById('searchAll').value||'').trim().toLowerCase();
-  const qc=(document.getElementById('searchChip').value||'').trim().toLowerCase();
-  if(qa)d=d.filter(r=>r.chip.toLowerCase().includes(qa)||(r.description||'').toLowerCase().includes(qa)||(r.brand||'').toLowerCase().includes(qa)||(r.type||'').toLowerCase().includes(qa));
-  if(qc)d=d.filter(r=>r.chip.toLowerCase().includes(qc));
-  const dir=sortAsc?1:-1;
-  d=[...d].sort((a,b)=>{
-    let va=a[sortCol]??'',vb=b[sortCol]??'';
-    if(typeof va==='number')return(va-vb)*dir;
-    return String(va).localeCompare(String(vb))*dir;
+  if(minS>0)params.set('min_stock',String(minS));
+  params.set('sort',sortCol);
+  params.set('order',sortAsc?'asc':'desc');
+  params.set('limit',String(limit));
+  params.set('offset',String(offset));
+  params.set('include_meta','true');
+  params.set('_t',String(Date.now()));
+  return params.toString();
+}
+
+async function loadPrices(){
+  if(_loadingPrices){_pendingLoad=true;return;}
+  _loadingPrices=true;
+  document.getElementById('loader').classList.add('active');
+  currentOffset=0;
+  allPrices=[];
+  document.getElementById('cards').innerHTML='<div style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</div>';
+  const apiBase=API_URL||(location.origin+'/api/');
+  try{
+    const data=await fetchJ(apiBase+'prices?'+buildQuery(0,PAGE_SIZE));
+    if(data && typeof data==='object' && !Array.isArray(data) && data.items){
+      allPrices=normalizePrices(data.items);
+      lastMeta=data.meta||null;
+      currentOffset=allPrices.length;
+      renderCards();
+      updateListCount();
+      updateKpis(lastMeta);
+      renderChart(data.chart_meta||null);
+      if(data.filter_options){
+        const fo=data.filter_options;
+        suppressSelectEvents=true;
+        try{
+          const selType=document.getElementById('selType');
+          const prevType=selType.value;
+          selType.innerHTML='<option value="">Все типы</option>'+fo.types.map(t=>'<option value="'+t.type+'">'+t.type+' ('+t.count+')</option>').join('');
+          selType.value=fo.types.some(t=>t.type===prevType)?prevType:'';
+          const selBrand=document.getElementById('selBrand');
+          const prevBrand=selBrand.value;
+          selBrand.innerHTML='<option value="">Все бренды</option>'+fo.brands.map(b=>'<option value="'+b.brand+'">'+b.brand+' ('+b.count+')</option>').join('');
+          selBrand.value=fo.brands.some(b=>b.brand===prevBrand)?prevBrand:'';
+          const selSource=document.getElementById('selSource');
+          const prevSource=selSource.value;
+          selSource.innerHTML='<option value="">Все источники</option>'+fo.sources.map(s=>'<option value="'+s.source+'">'+s.source+' ('+s.count+')</option>').join('');
+          selSource.value=fo.sources.some(s=>s.source===prevSource)?prevSource:'';
+          if(fo.capacities){
+            const selCap=document.getElementById('selCap');
+            const capDL=document.getElementById('selCapDL');
+            const prevCap=selCap.value;
+            const sortedCaps=fo.capacities.sort((a,b)=>capSortToBits(a.val)-capSortToBits(b.val));
+            capDL.innerHTML=sortedCaps.map(c=>'<option value="'+c.val+'" label="('+c.count+')"></option>').join('');
+            // Keep typed value to match market-tab behavior (free-form + suggestions).
+            selCap.value=prevCap;
+          }
+        }finally{
+          suppressSelectEvents=false;
+        }
+      }
+    }else{
+      // backward compat: plain array
+      allPrices=normalizePrices(data);
+      lastMeta=null;
+      currentOffset=allPrices.length;
+      renderCards();
+      updateListCount();
+      updateKpis(null);
+      renderChart(null);
+    }
+  }catch(e){
+    document.getElementById('cards').innerHTML='<div style="text-align:center;padding:24px;color:#ef4444">Ошибка: '+esc(e.message)+'</div>';
+  }finally{
+    _loadingPrices=false;
+    document.getElementById('loader').classList.remove('active');
+    if(_pendingLoad){_pendingLoad=false;loadPrices();}
+  }
+}
+
+async function loadMore(){
+  const apiBase=API_URL||(location.origin+'/api/');
+  const btn=document.getElementById('loadMore');
+  btn.textContent='Загрузка...';
+  try{
+    const data=await fetchJ(apiBase+'prices?'+buildQuery(currentOffset,PAGE_SIZE));
+    const more=normalizePrices(data);
+    allPrices=allPrices.concat(more);
+    currentOffset+=more.length;
+    renderCards();
+    if(more.length<PAGE_SIZE)btn.style.display='none';
+  }catch(e){btn.textContent='Ошибка, попробуйте ещё';}
+}
+
+
+function normalizePrices(data){
+  const arr=Array.isArray(data)?data:(data.items||[]);
+  return arr.map((p,i)=>{
+    let cap=p.capacity||'';
+    if(!cap){const m=(p.description||'').match(/(\d+(?:[\.,]\d+)?)\s*(Mb|Gb|TB|GB|MB|KB|Mbit|Gbit|Tbit)/i);if(m)cap=m[1]+m[2];}
+    return{...p,type:p.chip_type||p.type||'',chip:p.part_number||p.chip||'',link:p.url||p.link||'',stock:p.stock??p.moq??0,capacity:String(cap||'').trim(),id:p.id??i};
   });
-  return d;
 }
 
-function updateSelectors(){
-  const f={type:document.getElementById('selType').value,brand:document.getElementById('selBrand').value,source:document.getElementById('selSource').value};
-  function sub(ex){
-    let d=allPrices;
-    if(flags.flash||flags.ram){d=d.filter(r=>{const iF=FLASH.some(f=>r.type.toLowerCase().includes(f.toLowerCase()));const iR=RAM.some(f=>r.type.toLowerCase()===f.toLowerCase());if(flags.flash&&flags.ram)return iF||iR;if(flags.flash)return iF;return iR;});}
-    if(flags.stock)d=d.filter(r=>r.stock>0);
-    const minS=parseInt(document.getElementById('minStock')?.value)||0;
-    if(minS>0)d=d.filter(r=>r.stock>=minS);
-    if(ex!=='type'&&f.type)d=d.filter(r=>r.type===f.type);
-    if(ex!=='brand'&&f.brand)d=d.filter(r=>r.brand===f.brand);
-    if(ex!=='source'&&f.source)d=d.filter(r=>r.source===f.source);
-    return d;
-  }
-  function fill(sel,items,label,prev){
-    sel.innerHTML='<option value="">'+label+'</option>'+items.map(v=>'<option value="'+v+'">'+v+'</option>').join('');
-    sel.value=items.includes(prev)?prev:'';
-  }
-  fill(document.getElementById('selType'),[...new Set(sub('type').map(r=>r.type))].sort(),'Все типы',f.type);
-  fill(document.getElementById('selBrand'),[...new Set(sub('brand').map(r=>r.brand))].sort(),'Все бренды',f.brand);
-  fill(document.getElementById('selSource'),[...new Set(sub('source').map(r=>r.source))].sort(),'Все источники',f.source);
-  const caps=[...new Set(sub('').map(r=>r.capacity).filter(c=>c))].sort();
-  document.getElementById('capDL').innerHTML=caps.map(c=>'<option value="'+c+'">').join('');
+function capSortToBits(s){
+  const m=String(s||'').match(/(\d+(?:\.\d+)?)\s*(Tb|Gb|Mb|Kb|TB|GB|MB|KB|Tbit|Gbit|Mbit|Kbit)/i);
+  if(!m)return Number.MAX_SAFE_INTEGER;
+  const n=parseFloat(m[1]);
+  const u=m[2];
+  if(/^(Tb|Tbit)$/i.test(u))return n*1024*1024;
+  if(/^(GB)$/i.test(u))return n*8*1024;
+  if(/^(Gb|Gbit)$/i.test(u))return n*1024;
+  if(/^(MB)$/i.test(u))return n*8;
+  if(/^(Mb|Mbit)$/i.test(u))return n;
+  if(/^(KB)$/i.test(u))return n*8/1024;
+  if(/^(Kb|Kbit)$/i.test(u))return n/1024;
+  return n;
 }
 
-function render(){
-  updateSelectors();
-  filtered=getFiltered();
-  // KPIs
-  animN('kTotal',filtered.length);
-  animN('kStock',filtered.filter(r=>r.stock>0).length);
-  animN('kSources',new Set(filtered.map(r=>r.source)).size);
-  animN('kTypes',new Set(filtered.map(r=>r.type)).size);
-  document.getElementById('listCount').textContent=filtered.length.toLocaleString()+' шт';
-  renderChart();
-  page=0;renderCards();
+function updateSelectorsFromRows(rows){
+  function collect(key){
+    const m=new Map();
+    rows.forEach(r=>{const v=String(r[key]||'').trim();if(!v)return;m.set(v,(m.get(v)||0)+1)});
+    return [...m.entries()].map(([name,count])=>({name,count})).sort((a,b)=>a.name.localeCompare(b.name));
+  }
+  function fill(sel,items,label){
+    const prev=sel.value;
+    sel.innerHTML='<option value="">'+label+'</option>'+items.map(v=>'<option value="'+v.name+'">'+v.name+' ('+v.count+')</option>').join('');
+    sel.value=items.some(v=>v.name===prev)?prev:'';
+  }
+
+  fill(document.getElementById('selType'),collect('type'),'Все типы');
+  fill(document.getElementById('selBrand'),collect('brand'),'Все бренды');
+  fill(document.getElementById('selSource'),collect('source'),'Все источники');
+
+}
+
+function updateListCount(){
+  document.getElementById('listCount').textContent=allPrices.length+(allPrices.length>=currentOffset?' загружено':'');
+}
+
+function updateKpis(meta){
+  // Update header to reflect active filters
+  const parts=[];
+  const ft=document.getElementById('selType')?.value;
+  if(ft)parts.push(ft);
+  else{if(flags.flash)parts.push('Flash');if(flags.ram)parts.push('RAM');}
+  const fb=document.getElementById('selBrand')?.value;
+  if(fb)parts.push(fb);
+  const fs=document.getElementById('selSource')?.value;
+  if(fs)parts.push(fs);
+  const fc=(document.getElementById('selCap')?.value||'').trim();
+  if(fc)parts.push(fc);
+  const q=(document.getElementById('searchAll')?.value||'').trim();
+  if(q)parts.push('"'+q+'"');
+  const h1=document.querySelector('.header h1');
+  if(parts.length>0){
+    h1.innerHTML='<span>'+esc(parts[0])+'</span> '+(parts.length>1?esc(parts.slice(1).join(' · ')):'Prices');
+  }else{
+    h1.innerHTML='<span>Memory</span> Prices';
+  }
+  // Update KPIs from meta (server-side counts for the full filtered set)
+  if(meta){
+    animN('kTotal',meta.total);
+    animN('kStock',meta.stock_total);
+    animN('kSources',meta.sources_total);
+    animN('kTypes',meta.types_total);
+  }else{
+    // fallback: derive from loaded page (approximate)
+    animN('kTotal',allPrices.length+(currentOffset>=PAGE_SIZE?'+':''));
+    animN('kStock',allPrices.filter(p=>p.stock>0).length);
+    animN('kSources',new Set(allPrices.map(p=>p.source)).size);
+    animN('kTypes',new Set(allPrices.map(p=>p.type)).size);
+  }
 }
 
 function animN(id,target){
   const el=document.getElementById(id);
-  const start=parseInt(el.textContent)||0;
-  const dur=400,t0=performance.now();
-  (function tick(now){
-    const p=Math.min(1,(now-t0)/dur);
-    el.textContent=Math.round(start+(target-start)*(1-Math.pow(1-p,3))).toLocaleString();
-    if(p<1)requestAnimationFrame(tick);
-  })(t0);
+  el.textContent=typeof target==='number'?target.toLocaleString():target;
 }
 
-let chartStk=null;
-function renderChart(){
-  const srcMap={};
-  filtered.forEach(r=>{
-    if(!srcMap[r.source])srcMap[r.source]={sum:0,cnt:0,stock:0,withStock:0};
-    srcMap[r.source].sum+=r.price_usd;srcMap[r.source].cnt++;
-    srcMap[r.source].stock+=(r.stock||0);
-    if(r.stock>0)srcMap[r.source].withStock++;
-  });
-  const entries=Object.entries(srcMap).map(([s,v])=>({s,avg:v.cnt?v.sum/v.cnt:0,cnt:v.cnt,stock:v.stock,withStock:v.withStock})).sort((a,b)=>a.avg-b.avg);
-  const labels=entries.map(e=>e.s);
-  const vals=entries.map(e=>+e.avg.toFixed(4));
-  const colors=['#10b981','#3b82f6','#f59e0b','#ef4444','#06b6d4','#84cc16'];
+async function renderChart(chartMeta){
+  const apiBase=API_URL||(location.origin+'/api/');
+  // Derive chart group from catalog Flash/RAM filters (used for deals chart)
+  let group='';
+  if(flags.flash&&!flags.ram)group='flash';
+  else if(flags.ram&&!flags.flash)group='ram';
+  const colors=['#10b981','#3b82f6','#f59e0b','#ef4444','#06b6d4','#84cc16','#a78bfa','#fb923c','#22d3ee','#e879f9'];
 
-  // Price chart
-  if(chart)chart.destroy();
-  chart=new Chart(document.getElementById('chartSrc'),{type:'bar',data:{labels,datasets:[{data:vals,backgroundColor:entries.map((_,i)=>colors[i%6]),borderRadius:4,barThickness:16}]},options:{
-    indexAxis:'y',responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.raw.toFixed(4)+' ('+entries[c.dataIndex].cnt+' шт)'}}},
-    scales:{x:{grid:{display:false},ticks:{callback:v=>'$'+v,font:{size:9}}},y:{grid:{display:false},ticks:{font:{size:10}}}}
-  }});
+  try{
+    // Chart 1 & 2: use chartMeta from API response (same filter context)
+    // fallback to separate API calls if chartMeta not provided
+    let capPriceData, capStockData;
+    if(chartMeta){
+      capPriceData=chartMeta.prices_by_capacity||[];
+      capStockData=chartMeta.stock_by_capacity||[];
+    }else{
+      const gParam=group?'?group='+group:'';
+      [capPriceData, capStockData]=await Promise.all([
+        fetchJ(apiBase+'charts/prices_by_capacity'+gParam),
+        fetchJ(apiBase+'charts/stock_by_capacity'+gParam)
+      ]);
+    }
 
-  // Stock chart
-  const stockEntries=[...entries].sort((a,b)=>b.stock-a.stock);
-  if(chartStk)chartStk.destroy();
-  chartStk=new Chart(document.getElementById('chartStock'),{type:'bar',data:{
-    labels:stockEntries.map(e=>e.s),
-    datasets:[{data:stockEntries.map(e=>e.stock),backgroundColor:stockEntries.map((_,i)=>colors[i%6]+'99'),borderRadius:4,barThickness:16}]
-  },options:{
-    indexAxis:'y',responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const e=stockEntries[c.dataIndex];return c.raw.toLocaleString()+' шт ('+e.withStock+' позиций)'}}}},
-    scales:{x:{grid:{display:false},ticks:{callback:v=>v>=1000?(v/1000|0)+'K':v,font:{size:9}}},y:{grid:{display:false},ticks:{font:{size:10}}}}
-  }});
+    // Store full data for expand
+    window.__fullPriceData=capPriceData.sort((a,b)=>capSortToBits(a.capacity)-capSortToBits(b.capacity));
+    window.__fullStockData=capStockData.sort((a,b)=>b.total_stock-a.total_stock);
+    window.__chartExpanded={price:false,stock:false,deals:false};
+
+    // Chart 1: Prices by capacity (top 5 compact)
+    if(chartCapPrice)chartCapPrice.destroy();
+    const priceEntries=window.__fullPriceData.slice(0,5);
+    document.getElementById('expandPriceChart').style.display=window.__fullPriceData.length>5?'block':'none';
+    document.getElementById('expandPriceChart').textContent='Показать все ('+window.__fullPriceData.length+')';
+    document.getElementById('chartCapPrice').parentElement.style.height=Math.max(150,priceEntries.length*32+60)+'px';
+    chartCapPrice=new Chart(document.getElementById('chartCapPrice'),{type:'bar',data:{
+      labels:priceEntries.map(e=>e.capacity),
+      datasets:[{data:priceEntries.map(e=>e.avg_price),backgroundColor:priceEntries.map((_,i)=>{const t=i/(Math.max(priceEntries.length-1,1));const r=Math.round(16+(59-16)*t);const g=Math.round(185+(130-185)*t);const b=Math.round(129+(246-129)*t);return'rgba('+r+','+g+','+b+',0.75)';}),borderColor:priceEntries.map((_,i)=>{const t=i/(Math.max(priceEntries.length-1,1));const r=Math.round(16+(59-16)*t);const g=Math.round(185+(130-185)*t);const b=Math.round(129+(246-129)*t);return'rgba('+r+','+g+','+b+',0.5)';}),borderWidth:1,borderRadius:6,barThickness:22}]
+    },options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.raw.toFixed(2)+' ('+priceEntries[c.dataIndex].count+' позиций)'}}},
+      scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{callback:v=>'$'+v,font:{size:11},color:'#10b981'}},y:{grid:{display:false},ticks:{font:{size:12}}}}
+    }});
+
+    // Chart 2: Stock by capacity (top 5 compact)
+    if(chartCapStock)chartCapStock.destroy();
+    const stockEntries=window.__fullStockData.slice(0,5);
+    document.getElementById('expandStockChart').style.display=window.__fullStockData.length>5?'block':'none';
+    document.getElementById('expandStockChart').textContent='Показать все ('+window.__fullStockData.length+')';
+    const stockChartTotalStock=chartMeta&&chartMeta.total_stock!=null?chartMeta.total_stock:null;
+    const stockInChart=stockEntries.reduce((s,e)=>s+Number(e.total_stock),0);
+    const stockTitleEl=document.getElementById('stockChartTitle');
+    if(stockTitleEl){
+      if(stockChartTotalStock&&stockChartTotalStock>0){
+        const pct=Math.round(stockInChart/stockChartTotalStock*100);
+        stockTitleEl.textContent='Стоки по объёмам (топ-10, '+pct+'% от общего)';
+      }else{
+        stockTitleEl.textContent='Стоки по объёмам (топ-10)';
+      }
+    }
+    document.getElementById('chartCapStock').parentElement.style.height=Math.max(150,stockEntries.length*32+60)+'px';
+    chartCapStock=new Chart(document.getElementById('chartCapStock'),{type:'bar',data:{
+      labels:stockEntries.map(e=>e.capacity),
+      datasets:[{data:stockEntries.map(e=>e.total_stock),backgroundColor:stockEntries.map((_,i)=>{const t=i/(Math.max(stockEntries.length-1,1));const r=Math.round(59+(6-59)*t);const g=Math.round(130+(182-130)*t);const b=Math.round(246+(212-246)*t);return'rgba('+r+','+g+','+b+',0.7)';}),borderColor:stockEntries.map((_,i)=>{const t=i/(Math.max(stockEntries.length-1,1));const r=Math.round(59+(6-59)*t);const g=Math.round(130+(182-130)*t);const b=Math.round(246+(212-246)*t);return'rgba('+r+','+g+','+b+',0.5)';}),borderWidth:1,borderRadius:6,barThickness:22}]
+    },options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const d=stockEntries[c.dataIndex];return d.total_stock.toLocaleString()+' шт ('+d.positions+' позиций)'}}}},
+      scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{callback:v=>v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000|0)+'K':v,font:{size:11}}},y:{grid:{display:false},ticks:{font:{size:12}}}}
+    }});
+
+    // Chart 3: Deals — pass ALL active catalog filters
+    const dealsParams=new URLSearchParams();
+    if(group)dealsParams.set('group',group);
+    const _ft=document.getElementById('selType')?.value||'';
+    if(_ft)dealsParams.set('type',_ft);
+    const _fb=document.getElementById('selBrand')?.value||'';
+    if(_fb)dealsParams.set('brand',_fb);
+    const _fs=document.getElementById('selSource')?.value||'';
+    if(_fs)dealsParams.set('source',_fs);
+    const _fc=(document.getElementById('selCap')?.value||'').trim();
+    if(_fc)dealsParams.set('capacity',_fc);
+    const _fq=(document.getElementById('searchAll')?.value||'').trim();
+    if(_fq)dealsParams.set('search',_fq);
+    if(flags.stock)dealsParams.set('in_stock','true');
+    const _ms=parseInt(document.getElementById('minStock')?.value)||0;
+    if(_ms>0)dealsParams.set('min_stock',String(_ms));
+    const dealsQs=dealsParams.toString();
+    const dealsData=await fetchJ(apiBase+'charts/deals'+(dealsQs?'?'+dealsQs:''));
+    if(chartDeals)chartDeals.destroy();
+    window.__fullDealsData=dealsData;
+    window.__dealsData=dealsData.slice(0,5);
+    document.getElementById('expandDealsChart').style.display=dealsData.length>5?'block':'none';
+    document.getElementById('expandDealsChart').textContent='Показать все ('+dealsData.length+')';
+    if(window.__dealsData.length>0){
+      const deals=window.__dealsData;
+      document.getElementById('chartDeals').style.display='';
+      const emptyMsg=document.getElementById('dealsEmpty');if(emptyMsg)emptyMsg.style.display='none';
+      document.getElementById('chartDeals').parentElement.style.height=Math.max(150,deals.length*28+60)+'px';
+      chartDeals=new Chart(document.getElementById('chartDeals'),{type:'bar',data:{
+        labels:deals.map(d=>(d.capacity?d.capacity+' ':'')+d.part_number.slice(0,18)),
+        datasets:[{
+          data:deals.map(d=>d.discount_pct),
+          backgroundColor:deals.map(d=>d.discount_pct>=30?'rgba(16,185,129,0.7)':d.discount_pct>=20?'rgba(59,130,246,0.6)':'rgba(245,158,11,0.5)'),
+          borderColor:deals.map(d=>d.discount_pct>=30?'rgba(52,211,153,0.8)':d.discount_pct>=20?'rgba(96,165,250,0.8)':'rgba(251,191,36,0.8)'),
+          borderWidth:1,borderRadius:6,barThickness:18
+        }]
+      },options:{
+        indexAxis:'y',responsive:true,maintainAspectRatio:false,
+        onClick:(e,els)=>{if(els.length>0){const d=deals[els[0].index];if(d)openDeal(d);}},
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const d=deals[c.dataIndex];return'-'+d.discount_pct+'% | $'+d.price_usd.toFixed(2)+' (было $'+d.avg_hist_price.toFixed(2)+') | '+d.stock.toLocaleString()+' шт | '+d.source}}}},
+        scales:{x:{grid:{display:false},ticks:{callback:v=>v+'%',font:{size:11}}},y:{grid:{display:false},ticks:{font:{size:11}},},},
+        onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default';}
+      }});
+    } else {
+      // No deals — hide canvas, show text message
+      const wrap=document.getElementById('chartDeals').parentElement;
+      wrap.style.height='60px';
+      document.getElementById('chartDeals').style.display='none';
+      let msg=document.getElementById('dealsEmpty');
+      if(!msg){msg=document.createElement('div');msg.id='dealsEmpty';msg.style.cssText='display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px;text-align:center;padding:8px';wrap.appendChild(msg);}
+      msg.style.display='flex';
+      msg.textContent='Нет выгодных предложений по текущим фильтрам';
+    }
+  }catch(e){console.log('Chart error:',e)}
 }
 
 function renderCards(){
-  const shown=(page+1)*PAGE_SIZE;
-  const slice=filtered.slice(0,shown);
   const container=document.getElementById('cards');
-  container.innerHTML=slice.map(r=>{
+  container.innerHTML=allPrices.map(r=>{
     let href=r.link;
     if(r.source==='ebay')href='https://www.ebay.com/sch/i.html?_nkw='+encodeURIComponent(r.chip.split(/\s+/).slice(0,5).join(' '))+'&LH_BIN=1';
     else if(r.source==='jlcpcb')href='https://jlcpcb.com/parts/componentSearch?searchTxt='+encodeURIComponent(r.chip);
@@ -361,25 +687,76 @@ function renderCards(){
     const priceStr=r.price_usd<0.01?'$'+r.price_usd.toPrecision(2):'$'+r.price_usd.toFixed(2);
     const rubStr=r.price_rub?(r.price_rub.toLocaleString()+'₽'):'';
     const linkHtml=href?'<a class="card-link" href="'+href+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">Открыть</a>':'';
+    const desc=r.description||r.chip;
+    const tags=[r.type,r.brand,r.capacity].filter(Boolean).join(' / ');
     return'<div class="card" onclick="openModal('+r.id+')">'+
-      '<div class="card-top"><div class="card-chip">'+esc(r.chip)+'</div><div class="card-type">'+esc(r.type)+'</div></div>'+
-      '<div class="card-mid"><span class="card-tag">'+esc(r.brand)+'</span>'+(r.capacity?'<span class="card-tag">'+esc(r.capacity)+'</span>':'')+'<span class="card-src">'+esc(r.source)+'</span></div>'+
+      '<div class="card-top"><div class="card-chip">'+esc(tags)+'</div><div class="card-src">'+esc(r.source)+'</div></div>'+
+      '<div class="card-desc">'+esc(desc)+'</div>'+
       '<div class="card-bot"><span class="card-price">'+priceStr+'</span><span class="card-rub">'+rubStr+'</span>'+stockHtml+linkHtml+'</div>'+
     '</div>';
   }).join('');
   const btn=document.getElementById('loadMore');
-  btn.style.display=filtered.length>shown?'block':'none';
-  btn.textContent=filtered.length>shown?'Ещё 25 из '+filtered.length.toLocaleString():'Все загружены';
+  btn.style.display=allPrices.length>=currentOffset&&allPrices.length>0&&allPrices.length%PAGE_SIZE===0?'block':'none';
+  btn.textContent='Загрузить ещё '+PAGE_SIZE;
 }
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
-function openModal(id){
+function openDeal(d){
+  // Open modal for a deal item — search by part_number
+  const pn=d.part_number;
+  document.getElementById('mTitle').textContent=pn;
+  document.getElementById('mSub').textContent=[d.chip_type,d.capacity,'Скидка '+d.discount_pct+'%','Сток '+d.stock.toLocaleString()].filter(Boolean).join(' · ');
+  const discHtml='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:12px">'+
+    '<div class="src-row"><span class="src-name">Текущая</span><span class="src-price" style="color:var(--accent)">$'+d.price_usd.toFixed(2)+'</span></div>'+
+    '<div class="src-row"><span class="src-name">Историч. средн.</span><span class="src-price">$'+d.avg_hist_price.toFixed(2)+'</span></div>'+
+    '<div class="src-row"><span class="src-name">Скидка</span><span class="src-price" style="color:var(--accent)">-'+d.discount_pct+'%</span></div>'+
+    '<div class="src-row"><span class="src-name">Источник</span><span class="src-price">'+esc(d.source)+'</span></div></div>';
+  let linkUrl='';
+  if(d.source==='jlcpcb')linkUrl='https://jlcpcb.com/parts/componentSearch?searchTxt='+encodeURIComponent(pn);
+  else if(d.source==='lcsc')linkUrl='https://www.lcsc.com/search?q='+encodeURIComponent(pn);
+  else if(d.source==='findchips')linkUrl='https://www.findchips.com/search/'+encodeURIComponent(pn);
+  else if(d.source==='szlcsc')linkUrl='https://so.szlcsc.com/global.html?k='+encodeURIComponent(pn);
+  const linkHtml=linkUrl?'<a class="src-link" href="'+linkUrl+'" target="_blank" style="display:block;text-align:center;padding:10px;margin-top:8px;font-size:13px">Открыть на '+esc(d.source)+' &#8599;</a>':'';
+  document.getElementById('mSources').innerHTML=discHtml+linkHtml;
+  if(detailChart){detailChart.destroy();detailChart=null;}
+  const mCtx=document.getElementById('mChart').getContext('2d');
+  detailChart=new Chart(mCtx,{type:'bar',data:{
+    labels:['Сейчас','Историч. средн.'],
+    datasets:[{
+      data:[d.price_usd, d.avg_hist_price],
+      backgroundColor:['rgba(16,185,129,0.7)','rgba(113,113,122,0.4)'],
+      borderColor:['rgba(52,211,153,0.8)','rgba(113,113,122,0.6)'],
+      borderWidth:1,
+      borderRadius:6,
+      barThickness:24
+    }]
+  },options:{
+    indexAxis:'y',responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.raw.toFixed(2)}}},
+    scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{color:'#10b981',callback:v=>'$'+v}},y:{grid:{display:false},ticks:{color:'#a1a1aa',font:{size:12}}}}
+  }});
+  document.getElementById('overlay').classList.add('show');
+  if(tg?.BackButton){tg.BackButton.show();tg.BackButton.onClick(closeModal)}
+  loadHistory(pn);
+}
+
+async function openModal(id){
   const r=allPrices.find(p=>p.id===id);
   if(!r)return;
   document.getElementById('mTitle').textContent=r.chip;
   document.getElementById('mSub').textContent=[r.type,r.brand,r.capacity,r.description].filter(Boolean).join(' / ');
-  const siblings=allPrices.filter(p=>p.chip===r.chip).sort((a,b)=>a.price_usd-b.price_usd);
+  document.getElementById('mSources').innerHTML='<div style="text-align:center;padding:12px;color:var(--text3)">Загрузка...</div>';
+  document.getElementById('overlay').classList.add('show');
+  if(tg?.BackButton){tg.BackButton.show();tg.BackButton.onClick(closeModal)}
+  // Fetch all prices for this part_number from server
+  const apiBase=API_URL||(location.origin+'/api/');
+  let siblings=[r];
+  try{
+    const data=await fetchJ(apiBase+'prices?search='+encodeURIComponent(r.chip)+'&limit=100&_t='+Date.now());
+    const all=normalizePrices(data).filter(p=>p.chip===r.chip);
+    if(all.length>0)siblings=all.sort((a,b)=>a.price_usd-b.price_usd);
+  }catch(e){}
   document.getElementById('mSources').innerHTML='<div class="modal-label">Цены по источникам</div>'+siblings.map((s,i)=>{
     let href=s.link;
     if(s.source==='ebay')href='https://www.ebay.com/sch/i.html?_nkw='+encodeURIComponent(s.chip.split(/\s+/).slice(0,5).join(' '))+'&LH_BIN=1';
@@ -391,7 +768,6 @@ function openModal(id){
     const stockH=s.stock>0?'<span class="src-stock">'+s.stock.toLocaleString()+' шт</span>':'<span class="src-stock">нет</span>';
     return'<div class="src-row"><span class="src-name">'+esc(s.source)+'</span>'+stockH+'<span class="src-price">'+priceStr+'</span>'+linkH+'</div>';
   }).join('');
-  // Chart: always show source comparison
   if(detailChart)detailChart.destroy();
   const mCtx=document.getElementById('mChart').getContext('2d');
   const neonGrad=mCtx.createLinearGradient(0,0,300,0);
@@ -400,10 +776,7 @@ function openModal(id){
     labels:siblings.map(s=>s.source+(s.stock>0?' ✓':'')),
     datasets:[{data:siblings.map(s=>s.price_usd),backgroundColor:siblings.map((s,i)=>i===0?neonGrad:'rgba(59,130,246,0.4)'),borderRadius:6,barThickness:20}]
   },options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.raw.toFixed(4)}}},scales:{x:{grid:{color:'rgba(255,255,255,0.03)'},ticks:{color:'#71717a',callback:v=>'$'+v}},y:{grid:{display:false},ticks:{color:'#a1a1aa'}}}}});
-  // Load history async
   loadHistory(r.chip);
-  document.getElementById('overlay').classList.add('show');
-  if(tg?.BackButton){tg.BackButton.show();tg.BackButton.onClick(closeModal)}
 }
 
 let histChart=null;
@@ -440,8 +813,19 @@ async function loadHistory(chip){
 function showTab(tab){
   document.getElementById('tabPrices').classList.toggle('on',tab==='prices');
   document.getElementById('tabMarket').classList.toggle('on',tab==='market');
-  // prices tab = everything before marketTab
-  document.querySelectorAll('.kpis,.filters,.chart-wrap,.list-hd,.cards,.load-more,[style*="display:flex;gap:8px;padding"]').forEach(el=>el.style.display=tab==='prices'?'':'none');
+  if(tab==='prices'){
+    // Restore catalog KPIs and update time
+    updateKpis(lastMeta);
+    document.getElementById('updBadge').textContent=fmtTime(window.__globalStats?.updated);
+  }
+  if(tab==='market'){
+    // Reset header + show market update time
+    document.querySelector('.header h1').innerHTML='<span>Memory</span> Prices';
+    if(window.__marketUpdated)document.getElementById('updBadge').textContent=fmtTime(window.__marketUpdated);
+  }
+  const show=tab==='prices';
+  document.querySelectorAll('.kpis,.filters,.list-hd,.cards,.load-more').forEach(el=>el.style.display=show?'':'none');
+  document.getElementById('chartsSection').style.display=show?'':'none';
   document.getElementById('marketTab').style.display=tab==='market'?'block':'none';
   if(tab==='market'&&!window.__marketLoaded)loadMarket();
 }
@@ -450,7 +834,14 @@ const CAT_META={
   dram_spot:{name:'DRAM Спот',icon:'💾'},dram_contract:{name:'DRAM Контракт',icon:'📋'},
   flash_spot:{name:'Flash Спот',icon:'⚡'},flash_contract:{name:'Flash Контракт',icon:'📋'},
   module_spot:{name:'Модули',icon:'🧩'},memory_card_spot:{name:'Карты памяти',icon:'💳'},
-  emmc_spot:{name:'eMMC',icon:'📱'},ssd_spot:{name:'SSD',icon:'💿'}
+  emmc_spot:{name:'eMMC',icon:'📱'},ssd_spot:{name:'SSD',icon:'💿'},
+  ufs_emmc_contract:{name:'UFS/eMMC Контракт',icon:'📦'},
+  gddr_spot:{name:'GDDR',icon:'🎮'},wafer_spot:{name:'Wafer',icon:'🔬'},
+  lpddr_spot:{name:'LPDDR',icon:'📱'},
+  DDR5_Retail:{name:'DDR5 Ритейл',icon:'🛒'},
+  DDR5_Retail_DE:{name:'DDR5 DE',icon:'🇩🇪'},DDR5_Retail_ES:{name:'DDR5 ES',icon:'🇪🇸'},
+  DDR5_Retail_FR:{name:'DDR5 FR',icon:'🇫🇷'},DDR5_Retail_UK:{name:'DDR5 UK',icon:'🇬🇧'},
+  DDR5_Retail_US:{name:'DDR5 US',icon:'🇺🇸'}
 };
 
 let mktData={},mktCatFilter='',mktSearch='';
@@ -461,6 +852,11 @@ async function loadMarket(){
     const apiBase=API_URL||(location.origin+'/api/');
     mktData=await fetchJ(apiBase+'market');
     window.__marketLoaded=true;
+    // Find latest price_date across all market items
+    let maxD=null;
+    for(const items of Object.values(mktData)){items.forEach(i=>{if(i.price_date&&(!maxD||i.price_date>maxD))maxD=i.price_date;});}
+    window.__marketUpdated=maxD;
+    document.getElementById('updBadge').textContent=fmtTime(maxD);
     renderMarket();
   }catch(e){
     document.getElementById('mktCards').innerHTML='<div style="text-align:center;padding:32px;color:#ef4444">Ошибка: '+esc(e.message)+'</div>';
@@ -469,7 +865,7 @@ async function loadMarket(){
 
 function renderMarket(){
   // Build category buttons (once)
-  const cats=Object.keys(mktData).filter(c=>mktData[c].some(i=>i.session_avg&&Number(i.session_avg)>0.01));
+  const cats=Object.keys(mktData).filter(c=>mktData[c].length>0);
   let btns='<button class="btn'+(mktCatFilter?'':' on')+'" onclick="mktCatFilter=\'\';renderMktCards()">Все</button>';
   cats.forEach(c=>{
     const m=CAT_META[c]||{name:c,icon:'📊'};
@@ -489,7 +885,6 @@ function renderMarket(){
     return toBits(a)-toBits(b);
   });
   const selC=document.getElementById('mktCap');
-  const prev=selC.value;
   const volLabel=v=>{
     if(v.endsWith('Gb'))return v+' (чип)';
     if(v.endsWith('GB'))return v+' (модуль)';
@@ -497,8 +892,7 @@ function renderMarket(){
     if(v.endsWith('MB'))return v+' (модуль)';
     return v;
   };
-  selC.innerHTML='<option value="">Все объёмы</option>'+vols.map(v=>'<option value="'+v+'">'+volLabel(v)+'</option>').join('');
-  selC.value=vols.includes(prev)?prev:'';
+  document.getElementById('mktCapDL').innerHTML=vols.map(v=>'<option value="'+v+'">'+volLabel(v)+'</option>').join('');
   renderMktCards();
 }
 
@@ -509,7 +903,7 @@ function renderMktCards(){
     if(v)b.classList.toggle('on',v[1]===mktCatFilter);
     else b.classList.toggle('on',!mktCatFilter);
   });
-  const cats=Object.keys(mktData).filter(c=>mktData[c].some(i=>i.session_avg&&Number(i.session_avg)>0.01));
+  const cats=Object.keys(mktData).filter(c=>mktData[c].length>0);
   const q=(document.getElementById('mktSearch')?.value||'').toLowerCase();
   const capVal=document.getElementById('mktCap')?.value||'';
   let html='';
@@ -517,7 +911,6 @@ function renderMktCards(){
     if(mktCatFilter&&mktCatFilter!==cat)continue;
     const m=CAT_META[cat]||{name:cat,icon:'📊'};
     const good=mktData[cat].filter(i=>{
-      if(!i.session_avg||Number(i.session_avg)<=0.01)return false;
       if(q&&!i.item.toLowerCase().includes(q))return false;
       if(capVal){const re=new RegExp('\\b'+capVal.replace(/([()])/g,'\\$1')+'\\b');if(!re.test(i.item))return false;}
       return true;
@@ -531,17 +924,22 @@ function renderMktCards(){
       // Build price lines per source
       let priceLines='';
       arr.forEach(i=>{
-        const avg=Number(i.session_avg),avgStr='$'+avg.toFixed(2);
-        const srcLabel=i.source==='dramexchange'?'DRAMeX':'TrendForce';
+        const avg=Number(i.session_avg||0),avgStr=avg>0?'$'+avg.toFixed(2):'—';
+        const srcLabel=i.source==='dramexchange'?'DRAMeX':i.source==='whereismyram'?'WIMR':'TrendForce';
         const chg=String(i.session_change||'').trim();
         const chgNum=parseFloat(chg);
         let chgClass='flat',chgStr='';
         if(!isNaN(chgNum)&&chgNum>0){chgClass='up';chgStr='+'+chgNum.toFixed(2)+'%';}
         else if(!isNaN(chgNum)&&chgNum<0){chgClass='down';chgStr=chgNum.toFixed(2)+'%';}
+        // WIMR trend badges
+        let trendHtml='';
+        if(i.percent_week!=null){const pw=Number(i.percent_week);const tc=pw>=0?'up':'down';trendHtml+='<span class="mkt-chg '+tc+'" style="font-size:10px">нед '+(pw>=0?'+':'')+pw.toFixed(1)+'%</span>';}
+        if(i.percent_month!=null){const pm=Number(i.percent_month);const tc=pm>=0?'up':'down';trendHtml+='<span class="mkt-chg '+tc+'" style="font-size:10px">мес '+(pm>=0?'+':'')+pm.toFixed(1)+'%</span>';}
         priceLines+='<div class="mkt-row2" style="margin-top:2px">'+
           '<span class="mkt-src">'+srcLabel+'</span>'+
           '<span class="mkt-avg" style="font-size:14px">'+avgStr+'</span>'+
           (chgStr?'<span class="mkt-chg '+chgClass+'">'+esc(chgStr)+'</span>':'')+
+          trendHtml+
           '</div>';
       });
       html+='<div class="mkt-card" onclick="openMktHistory(\''+esc(name).replace(/'/g,"\\'")+'\')">'+
@@ -564,7 +962,7 @@ async function openMktHistory(item){
   if(tg?.BackButton){tg.BackButton.show();tg.BackButton.onClick(closeModal)}
   try{
     const apiBase=API_URL||(location.origin+'/api/');
-    const hist=await fetchJ(apiBase+'market/history/'+encodeURIComponent(item));
+    const hist=await fetchJ(apiBase+'market/history/'+encodeURIComponent(item)+'?limit=5000');
     const d0=hist[0]?.price_date||'',d1=hist[hist.length-1]?.price_date||'';
     document.getElementById('mSub').textContent='Источник: TrendForce · '+d0+' — '+d1+' ('+hist.length+' точек)';
     const dates=hist.map(h=>h.price_date||'');
@@ -643,19 +1041,36 @@ async function init(){
   const apiBase=API_URL||(location.origin+'/api/');
   const t=Date.now();
   try{
-    const[stats,prices]=await Promise.all([
+    const[stats,types,brands,sources,caps]=await Promise.all([
       fetchJ(apiBase+'stats?_t='+t),
-      fetchJ(apiBase+'prices?limit=50000&sort=price_usd&order=asc&_t='+t)
+      fetchJ(apiBase+'types?_t='+t),
+      fetchJ(apiBase+'brands?_t='+t),
+      fetchJ(apiBase+'sources?_t='+t),
+      fetchJ(apiBase+'capacities?_t='+t)
     ]);
-    let data=Array.isArray(prices)?prices:(prices.items||[]);
-    allPrices=data.map(p=>{
-      let cap=p.capacity||'';
-      if(!cap){const m=(p.description||'').match(/(\d+)\s*(Mbit|Gbit|[MGKT]B)/i);if(m)cap=m[1]+m[2];}
-      return{...p,type:p.chip_type||p.type||'',chip:p.part_number||p.chip||'',link:p.url||p.link||'',stock:p.stock??p.moq??0,capacity:cap};
-    });
-    allPrices.forEach((p,i)=>{if(p.id===undefined)p.id=i;});
+    // KPIs from stats (save globally for tab switch restore)
+    window.__globalStats=stats;
+    animN('kTotal',stats.total||0);
+    animN('kStock',stats.in_stock||0);
+    animN('kSources',stats.sources||0);
+    animN('kTypes',stats.types||0);
     document.getElementById('updBadge').textContent=fmtTime(stats?.updated);
-    render();
+    // Initial selector population from stats endpoints (before first load)
+    allTypes=(types||[]).map(t=>({name:t.type,count:t.count}));
+    allBrands=(brands||[]).map(b=>({name:b.brand,count:b.count}));
+    allSources=(sources||[]).map(s=>({name:s.source,count:s.count}));
+    suppressSelectEvents=true;
+    try{
+      document.getElementById('selType').innerHTML='<option value="">Все типы</option>'+allTypes.map(v=>'<option value="'+v.name+'">'+v.name+'</option>').join('');
+      document.getElementById('selBrand').innerHTML='<option value="">Все бренды</option>'+allBrands.map(v=>'<option value="'+v.name+'">'+v.name+'</option>').join('');
+      document.getElementById('selSource').innerHTML='<option value="">Все источники</option>'+allSources.map(v=>'<option value="'+v.name+'">'+v.name+'</option>').join('');
+      const sortedCaps=(caps||[]).map(c=>c.val).sort((a,b)=>capSortToBits(a)-capSortToBits(b));
+      document.getElementById('selCapDL').innerHTML=sortedCaps.map(c=>'<option value="'+c+'"></option>').join('');
+    }finally{
+      suppressSelectEvents=false;
+    }
+    // Load first batch (full set under current filters)
+    await loadPrices();
   }catch(e){
     console.error('API error:',e);
     document.getElementById('updBadge').textContent='Ошибка: '+e.message;

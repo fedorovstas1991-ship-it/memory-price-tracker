@@ -1,3 +1,4 @@
+import random
 """
 Memory Price Tracker — Full Catalog Crawler (Scrapling)
 Crawls ALL memory chips from ALL available sources.
@@ -20,7 +21,7 @@ from scrapling.fetchers import AsyncStealthySession
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 log = logging.getLogger("crawl_all")
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mpt:mpt_secure_2026@127.0.0.1:5432/memoryprices")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mpt:changeme@127.0.0.1:5432/memoryprices")
 
 # ─── Brand extraction ───────────────────────────────────────────────
 BRAND_MAP = {
@@ -100,15 +101,17 @@ CATEGORIES = [
     "Flash Memory", "DRAM", "SDRAM", "Memory IC",
 ]
 
-# Expanded keyword list for JLCPCB/LCSC: generic types + manufacturer part prefixes.
-# Each prefix targets a distinct product family and returns unique results that the
-# generic type queries miss (because the search index matches on part number prefix).
-# 60 keywords × 100 per page × 2 sources (jlcpcb + lcsc) = up to 12 000 entries.
-# 60 categories × 15 s cooldown = ~15 min total — acceptable for a nightly cron job.
+# Expanded keyword list for JLCPCB: generic memory types + manufacturer part prefixes.
+# Each keyword targets a distinct product family and returns results the generic
+# type queries miss (because the search index matches on part number prefix).
+# 68 keywords × 100 per page = up to 6 800 JLCPCB entries per run.
+# LCSC now uses a dedicated category-browse approach (wmCatalogId=1288) instead.
 EXPANDED_KEYWORDS = [
     # Generic types (same as CATEGORIES, kept for baseline coverage)
     "eMMC", "UFS", "DDR4", "DDR5", "DDR3", "LPDDR4", "LPDDR5",
     "NAND Flash", "NOR Flash", "SRAM", "Flash Memory", "DRAM", "SDRAM",
+    # Additional memory types not in CATEGORIES
+    "EEPROM", "FRAM", "MRAM", "PSRAM",
     # Samsung eMMC / UFS
     "KLMAG", "KLMBG", "KLUCG", "KLUDG",
     # Kioxia (formerly Toshiba)
@@ -155,12 +158,14 @@ async def crawl_findchips(rate: float) -> list[dict]:
     """FindChips — HTML scraping with pagination."""
     log.info("FindChips: starting")
     entries = []
+    seen_pns = set()  # Track part numbers to dedup across pages/keywords
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
         "Accept": "text/html",
     }
     async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=True) as client:
         for cat in FINDCHIPS_KEYWORDS:
+            prev_total = len(entries)
             for page_num in range(1, 30):  # up to 30 pages per keyword
                 try:
                     url = f"https://www.findchips.com/search/{cat}"
@@ -187,7 +192,7 @@ async def crawl_findchips(rate: float) -> list[dict]:
                         best = 0.0
                         for t in tiers:
                             if len(t) >= 3 and t[1] == 'USD':
-                                p = float(t[2])
+                                p = float(str(t[2]).replace(",", ""))
                                 if best == 0 or (int(t[0]) <= 10 and p > 0):
                                     best = p
                         if best <= 0:
@@ -196,6 +201,10 @@ async def crawl_findchips(rate: float) -> list[dict]:
                             stock = int(str(stock_s).replace(',', ''))
                         except ValueError:
                             stock = 0
+                        dedup_key = (pn, dist)
+                        if dedup_key in seen_pns:
+                            continue
+                        seen_pns.add(dedup_key)
                         entries.append({
                             'chip_type': classify_type(pn, cat),
                             'part_number': pn,
@@ -211,7 +220,12 @@ async def crawl_findchips(rate: float) -> list[dict]:
                             'stock': stock,
                             'url': f"https://www.findchips.com/search/{pn}",
                         })
-                    log.info(f"FindChips: {cat} page {page_num}, {len(rows)} rows, total {len(entries)}")
+                    new_count = len(entries) - prev_total
+                    log.info(f"FindChips: {cat} page {page_num}, {len(rows)} rows, {new_count} new, total {len(entries)}")
+                    if new_count == 0:
+                        log.info(f"FindChips: {cat} page {page_num} — no new items, stopping keyword")
+                        break
+                    prev_total = len(entries)
                     await asyncio.sleep(1.5)
                 except Exception as e:
                     log.warning(f"FindChips: {cat} page {page_num} error: {e}")
@@ -229,13 +243,33 @@ async def crawl_szlcsc(rate: float) -> list[dict]:
         "User-Agent": "Googlebot/2.1 (+http://www.google.com/bot.html)",
         "Accept-Language": "zh-CN,zh;q=0.9",
     }
+    # Try to get live CNY/USD rate, fall back to hardcoded
     CNY_TO_USD = 0.14
-    async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=True) as client:
-        for cat in CATEGORIES:
-            for pg in range(1, 51):  # up to 50 pages (1500 items / 30 per page)
+    try:
+        async with httpx.AsyncClient(timeout=10) as fx_client:
+            r = await fx_client.get("https://open.er-api.com/v6/latest/CNY")
+            if r.status_code == 200:
+                usd_rate = r.json().get("rates", {}).get("USD")
+                if usd_rate and 0.10 < usd_rate < 0.20:
+                    CNY_TO_USD = round(usd_rate, 4)
+                    log.info(f"SZLCSC: live CNY/USD rate = {CNY_TO_USD}")
+    except Exception:
+        log.info(f"SZLCSC: using fallback CNY/USD = {CNY_TO_USD}")
+    # SZLCSC-specific keywords (short names work better than full names)
+    szlcsc_keywords = [
+        "eMMC", "UFS", "DDR4", "DDR5", "DDR3", "LPDDR4", "LPDDR5",
+        "NAND", "NOR", "SRAM", "DRAM", "SDRAM", "Flash", "SSD",
+    ]
+    for cat in szlcsc_keywords:
+        # Fresh client per keyword — avoids session-level rate limiting (302 → login)
+        async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=False) as client:
+            for pg in range(1, 11):  # up to 10 pages (300 items) per keyword — SZLCSC IP limit
                 try:
                     url = f"https://so.szlcsc.com/global.html?k={cat}&pageIndex={pg}&pageSize=30"
                     resp = await client.get(url)
+                    if resp.status_code in (301, 302, 303):
+                        log.warning(f"SZLCSC: {cat} page {pg} — redirect (rate-limit), stopping keyword")
+                        break
                     if resp.status_code != 200:
                         break
                     # Extract __NEXT_DATA__ via regex (faster than HTML parser)
@@ -261,13 +295,26 @@ async def crawl_szlcsc(rate: float) -> list[dict]:
                         if not desc:
                             desc = ''
                         price_list = vo.get('productPriceList', [])
+                        stock_qty = int(vo.get('stockNumber', vo.get('validStockNumber', 0)) or 0)
                         best_cny = 0.0
+                        best_tier_qty = 0
+                        fallback_cny = 0.0
                         for tier in price_list:
                             if isinstance(tier, dict):
                                 p = float(tier.get('productPrice', tier.get('thePrice', 0)) or 0)
                                 q = int(tier.get('startPurchasedNumber', tier.get('spNumber', 0)) or 0)
-                                if p > 0 and (q <= 10 or best_cny == 0):
+                                if p <= 0:
+                                    continue
+                                if fallback_cny == 0 or q <= 1:
+                                    fallback_cny = p
+                                # Best price at highest tier where tier_qty <= stock
+                                if stock_qty > 0 and q <= stock_qty and q >= best_tier_qty:
                                     best_cny = p
+                                    best_tier_qty = q
+                                elif stock_qty <= 0 and (q <= 10 or best_cny == 0):
+                                    best_cny = p
+                        if best_cny <= 0:
+                            best_cny = fallback_cny
                         if best_cny <= 0 or not pn:
                             continue
                         price_usd = round(best_cny * CNY_TO_USD, 4)
@@ -290,10 +337,11 @@ async def crawl_szlcsc(rate: float) -> list[dict]:
                             'url': f"https://item.szlcsc.com/{vo.get('productId', '')}.html",
                         })
                     log.info(f"SZLCSC: {cat} page {pg}, {len(products)} products, total {len(entries)}")
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(30 + random.uniform(5, 15))  # SZLCSC: longer delays to avoid 302
                 except Exception as e:
                     log.warning(f"SZLCSC: {cat} page {pg} error: {e}")
                     break
+        await asyncio.sleep(90 + random.uniform(10, 30))  # SZLCSC: long cooldown between keywords
     log.info(f"SZLCSC: done, {len(entries)} entries")
     return entries
 
@@ -305,15 +353,25 @@ JLCPCB_HEADERS = {
     "Origin": "https://jlcpcb.com",
 }
 
-def _extract_best_price(prices: list) -> float:
-    """Return lowest qty-1 price from a JLCPCB componentPrices list."""
+def _extract_best_price(prices: list, stock: int = 0) -> float:
+    """Return best price at highest tier where tier_qty <= stock.
+    If stock unknown (0), fall back to qty-1 price."""
     best = 0.0
+    best_qty = 0
+    fallback = 0.0
     for tier in prices:
         p = float(tier.get('productPrice', 0) or 0)
         q = int(tier.get('startNumber', 0) or 0)
-        if p > 0 and (q <= 10 or best == 0):
+        if p <= 0:
+            continue
+        if fallback == 0 or q <= 1:
+            fallback = p
+        if stock > 0 and q <= stock and q >= best_qty:
             best = p
-    return best
+            best_qty = q
+        elif stock <= 0 and (q <= 10 or best == 0):
+            best = p
+    return best if best > 0 else fallback
 
 def _jlcpcb_item_to_entry(item: dict, rate: float, source: str, distributor: str) -> dict | None:
     """Convert a raw JLCPCB list item to a normalised price entry. Returns None if unusable."""
@@ -321,7 +379,8 @@ def _jlcpcb_item_to_entry(item: dict, rate: float, source: str, distributor: str
     if not pn:
         return None
     desc = item.get('describe', '') or ''
-    best = _extract_best_price(item.get('componentPrices', []))
+    stock = int(item.get('stockCount', item.get('componentStock', 0)) or 0)
+    best = _extract_best_price(item.get('componentPrices', []), stock)
     if best <= 0:
         return None
     return {
@@ -358,16 +417,19 @@ async def _jlcpcb_fetch_pages(
     entries = []
     for cat_idx, cat in enumerate(categories):
         if cat_idx > 0:
-            # Pause between categories so the server's rate-limit window resets.
             await asyncio.sleep(category_delay)
-        # Fresh client per category — avoids connection-level tracking.
-        async with httpx.AsyncClient(timeout=30, headers=JLCPCB_HEADERS) as client:
+        # Use cookies jar to maintain XSRF-TOKEN across pages
+        async with httpx.AsyncClient(timeout=30, headers=JLCPCB_HEADERS, cookies=httpx.Cookies()) as client:
             for pg in range(1, 50):
                 try:
                     body = {"keyword": cat, "currentPage": pg, "pageSize": 100}
+                    # After first request, add XSRF-TOKEN from cookie to headers
+                    xsrf = client.cookies.get("XSRF-TOKEN")
+                    if xsrf:
+                        client.headers["X-XSRF-TOKEN"] = xsrf
                     resp = await client.post(JLCPCB_API, json=body)
                     if resp.status_code == 403:
-                        log.warning(f"{source}: {cat} page {pg} — 403 (rate-limited), skipping category")
+                        log.warning(f"{source}: {cat} page {pg} — 403 (CSRF?), skipping category")
                         break
                     if resp.status_code != 200:
                         log.warning(f"{source}: {cat} page {pg} — HTTP {resp.status_code}, stopping")
@@ -397,34 +459,189 @@ async def crawl_jlcpcb(rate: float) -> list[dict]:
         source='jlcpcb',
         distributor='JLCPCB/LCSC',
         page_delay=3.0,
-        category_delay=15.0,
+        category_delay=3.0,
     )
     log.info(f"JLCPCB: done, {len(entries)} entries")
     return entries
 
 
 # ─── LCSC International ──────────────────────────────────────────────
+#
+# LCSC uses its own API at wmsc.lcsc.com, completely separate from JLCPCB.
+# Strategy:
+#   Phase 1 — Full category browse: wmCatalogId=1288 ("Memory ICs") yields
+#             ~47 000 products across 1 667 pages.  We cap at 200 pages
+#             (5 600 items) to finish within the nightly window, sorted by
+#             stock descending so in-stock parts always come first.
+#   Phase 2 — Keyword supplement: run EXPANDED_KEYWORDS through the same
+#             endpoint to catch long-tail parts that the category browse
+#             may order too late (e.g. rare prefixes), but only 5 pages
+#             per keyword so we stay fast.
+
+LCSC_API = "https://wmsc.lcsc.com/ftps/wm/search/v2/global"
+LCSC_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+    "Content-Type": "application/json",
+    "Referer": "https://www.lcsc.com/",
+    "Origin": "https://www.lcsc.com",
+    "Accept": "application/json",
+}
+# wmCatalogId=1288 = "Memory (ICs)" under Integrated Circuits → Memory
+LCSC_MEMORY_CATALOG_ID = 1288
+# Maximum pages to fetch in the category-browse phase (28 items/page → 5 600 items)
+LCSC_CATEGORY_MAX_PAGES = 200
+
+
+def _lcsc_item_to_entry(prod: dict, rate: float) -> dict | None:
+    """Convert a LCSC productSearchResultVO productList item to a price entry."""
+    pn = prod.get("productModel", "")
+    if not pn:
+        return None
+    price_list = prod.get("productPriceList") or []
+    stock_qty = int(prod.get("stockNumber") or 0)
+    best = 0.0
+    best_ladder = 0
+    fallback = 0.0
+    for tier in price_list:
+        p = float(tier.get("usdPrice") or tier.get("currencyPrice") or 0)
+        ladder = int(tier.get("ladder") or 0)
+        if p <= 0:
+            continue
+        if fallback == 0 or ladder <= 1:
+            fallback = p
+        # Best price at highest tier where tier_qty <= stock
+        if stock_qty > 0 and ladder <= stock_qty and ladder >= best_ladder:
+            best = p
+            best_ladder = ladder
+        elif stock_qty <= 0 and (ladder <= 10 or best == 0):
+            best = p
+    if best <= 0:
+        best = fallback
+    if best <= 0:
+        return None
+    product_code = prod.get("productCode", "")
+    url = prod.get("url") or (
+        f"https://www.lcsc.com/product-detail/{product_code}.html" if product_code else ""
+    )
+    desc = prod.get("productIntroEn") or prod.get("productDescEn") or ""
+    catalog = prod.get("catalogName") or prod.get("parentCatalogName") or ""
+    brand = prod.get("brandNameEn") or ""
+    return {
+        "chip_type": classify_type(pn, f"{desc} {catalog}"),
+        "part_number": pn,
+        "description": (f"{catalog}: {desc}"[:200]) if desc else catalog[:200],
+        "brand": extract_brand(pn, brand) if extract_brand(pn, "") == "Other" else extract_brand(pn, ""),
+        "capacity": "",
+        "source": "lcsc",
+        "distributor": "LCSC",
+        "price_usd": round(best, 4),
+        "price_rub": round(best * rate, 2),
+        "price_cny": None,
+        "moq": int(prod.get("minBuyNumber") or 1),
+        "stock": int(prod.get("stockNumber") or 0),
+        "url": url,
+    }
+
 
 async def crawl_lcsc(rate: float) -> list[dict]:
-    """LCSC International (lcsc.com) — uses the JLCPCB/LCSC component search JSON API.
+    """LCSC International (lcsc.com) — real LCSC search API.
 
-    The endpoint is shared infrastructure: results have lcscGoodsUrl pointing to
-    lcsc.com product pages and USD prices already denominated in USD.
-    We tag entries source='lcsc' / distributor='LCSC' to keep them separate from
-    the JLCPCB SMT-library entries.
-    Uses EXPANDED_KEYWORDS (same as JLCPCB) so both sources are queried with the
-    full 60-keyword list, yielding up to ~6 000 unique LCSC entries.
+    Phase 1: Category browse — fetches up to LCSC_CATEGORY_MAX_PAGES pages of
+    the Memory IC category (wmCatalogId=1288), sorted by stock descending so
+    in-stock parts appear first.  ~47 000 total products available; we take
+    the top 5 600 (capped to keep nightly runtime reasonable).
+
+    Phase 2: Keyword supplement — runs EXPANDED_KEYWORDS through the search
+    API (5 pages each) to catch long-tail parts not covered by the category
+    sort order.
+
+    Both phases use wmsc.lcsc.com, which is the real LCSC product database,
+    NOT the JLCPCB API.
     """
     log.info("LCSC: starting")
-    entries = await _jlcpcb_fetch_pages(
-        categories=EXPANDED_KEYWORDS,
-        rate=rate,
-        source='lcsc',
-        distributor='LCSC',
-        page_delay=3.0,
-        category_delay=15.0,
-    )
-    log.info(f"LCSC: done, {len(entries)} entries")
+    entries: list[dict] = []
+    seen_pns: set[str] = set()
+
+    async with httpx.AsyncClient(timeout=30, headers=LCSC_HEADERS) as client:
+
+        # ── Phase 1: Full Memory IC category browse ─────────────────────────
+        log.info(f"LCSC: phase 1 — category browse (wmCatalogId={LCSC_MEMORY_CATALOG_ID})")
+        for pg in range(1, LCSC_CATEGORY_MAX_PAGES + 1):
+            try:
+                body = {
+                    "keyword": "memory",          # non-empty keyword required
+                    "wmCatalogId": LCSC_MEMORY_CATALOG_ID,
+                    "currentPage": pg,
+                    "pageSize": 28,               # API default page size
+                }
+                resp = await client.post(LCSC_API, json=body)
+                if resp.status_code != 200:
+                    log.warning(f"LCSC cat page {pg}: HTTP {resp.status_code}, stopping phase 1")
+                    break
+                data = resp.json()
+                if not data.get("ok"):
+                    log.warning(f"LCSC cat page {pg}: API error code={data.get('code')}, stopping phase 1")
+                    break
+                psrvo = (data.get("result") or {}).get("productSearchResultVO") or {}
+                products = psrvo.get("productList") or []
+                if not products:
+                    log.info(f"LCSC cat page {pg}: no products, done with phase 1")
+                    break
+                before = len(entries)
+                for prod in products:
+                    entry = _lcsc_item_to_entry(prod, rate)
+                    if entry and entry["part_number"] not in seen_pns:
+                        seen_pns.add(entry["part_number"])
+                        entries.append(entry)
+                total_pages = data["result"].get("productTotalPage", 0)
+                log.info(
+                    f"LCSC cat page {pg}/{min(total_pages, LCSC_CATEGORY_MAX_PAGES)}: "
+                    f"{len(products)} items (+{len(entries)-before} new), total {len(entries)}"
+                )
+                if pg >= total_pages:
+                    log.info("LCSC: reached last page of category, done with phase 1")
+                    break
+                await asyncio.sleep(2.0)
+            except Exception as e:
+                log.warning(f"LCSC cat page {pg} error: {e}")
+                break
+
+        log.info(f"LCSC: phase 1 done — {len(entries)} entries from category browse")
+
+        # ── Phase 2: Keyword supplement ─────────────────────────────────────
+        log.info("LCSC: phase 2 — keyword supplement")
+        for kw_idx, kw in enumerate(EXPANDED_KEYWORDS):
+            if kw_idx > 0:
+                await asyncio.sleep(5.0)
+            for pg in range(1, 6):  # 5 pages × 100 items = 500 per keyword
+                try:
+                    body = {"keyword": kw, "currentPage": pg, "pageSize": 100}
+                    resp = await client.post(LCSC_API, json=body)
+                    if resp.status_code != 200:
+                        break
+                    data = resp.json()
+                    if not data.get("ok"):
+                        break
+                    psrvo = (data.get("result") or {}).get("productSearchResultVO") or {}
+                    products = psrvo.get("productList") or []
+                    if not products:
+                        break
+                    before = len(entries)
+                    for prod in products:
+                        entry = _lcsc_item_to_entry(prod, rate)
+                        if entry and entry["part_number"] not in seen_pns:
+                            seen_pns.add(entry["part_number"])
+                            entries.append(entry)
+                    log.info(
+                        f"LCSC kw={kw!r} page {pg}: {len(products)} items "
+                        f"(+{len(entries)-before} new), total {len(entries)}"
+                    )
+                    await asyncio.sleep(1.5)
+                except Exception as e:
+                    log.warning(f"LCSC kw={kw!r} page {pg} error: {e}")
+                    break
+
+    log.info(f"LCSC: done, {len(entries)} entries total")
     return entries
 
 async def crawl_memorymarket(rate: float) -> list[dict]:
@@ -655,24 +872,31 @@ async def crawl_ebay(rate: float) -> list[dict]:
 
 # ─── Database ───────────────────────────────────────────────────────
 
-async def write_to_db(all_entries: list[dict]):
-    log.info(f"Writing {len(all_entries)} entries to PostgreSQL...")
-    pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=5)
+async def write_source_to_db(source_name: str, entries: list[dict], pool):
+    """Write one source's entries to DB immediately (DELETE old + INSERT new).
+    This allows iterative updates — each source appears in the app as soon as it's done."""
+    if not entries:
+        return 0
     now = datetime.now(timezone.utc)
-    try:
-        async with pool.acquire() as conn:
-            await conn.execute("TRUNCATE prices RESTART IDENTITY")
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Delete old data for this source only (not TRUNCATE entire table)
+            deleted = await conn.execute(
+                "DELETE FROM prices WHERE source = $1", source_name
+            )
+            log.info(f"DB: deleted old {source_name} rows ({deleted})")
+
             records = [
-                (
-                    e['chip_type'], e['part_number'], e.get('description', ''),
-                    e.get('brand', 'Other'), e.get('capacity', ''),
-                    e['source'], e.get('distributor', ''),
-                    e.get('price_usd'), e.get('price_rub'), e.get('price_cny'),
-                    e.get('moq', 1), e.get('stock'),
-                    e.get('url', ''), now,
-                )
-                for e in all_entries
-            ]
+            (
+                e['chip_type'], e['part_number'], e.get('description', ''),
+                e.get('brand', 'Other'), e.get('capacity', ''),
+                e['source'], e.get('distributor', ''),
+                e.get('price_usd'), e.get('price_rub'), e.get('price_cny'),
+                e.get('moq', 1), e.get('stock'),
+                e.get('url', ''), now,
+            )
+            for e in entries
+        ]
             await conn.copy_records_to_table(
                 'prices',
                 records=records,
@@ -680,22 +904,33 @@ async def write_to_db(all_entries: list[dict]):
                          'source', 'distributor', 'price_usd', 'price_rub', 'price_cny',
                          'moq', 'stock', 'url', 'fetched_at'],
             )
-            log.info(f"Prices table: {len(records)} rows written")
             # History (append only)
             hist = [
                 (e['part_number'], e['source'], e.get('price_usd'), now)
-                for e in all_entries if e.get('price_usd')
+                for e in entries if e.get('price_usd')
             ]
-            await conn.copy_records_to_table(
-                'history',
-                records=hist,
-                columns=['part_number', 'source', 'price_usd', 'fetched_at'],
-            )
-            log.info(f"History table: {len(hist)} rows appended")
-    finally:
-        await pool.close()
+            if hist:
+                await conn.copy_records_to_table(
+                    'history',
+                    records=hist,
+                    columns=['part_number', 'source', 'price_usd', 'fetched_at'],
+                )
+            log.info(f"DB: {source_name} → {len(records)} prices + {len(hist)} history rows")
+    return len(records)
 
 # ─── Main ───────────────────────────────────────────────────────────
+
+async def _dedup(entries: list[dict]) -> list[dict]:
+    """Deduplicate by (part_number, source, distributor)."""
+    seen = set()
+    unique = []
+    for e in entries:
+        key = (e['part_number'], e['source'], e.get('distributor', ''))
+        if key not in seen:
+            seen.add(key)
+            unique.append(e)
+    return unique
+
 
 async def main():
     log.info("=== FULL CATALOG CRAWL STARTING ===")
@@ -704,49 +939,69 @@ async def main():
     rate = await get_usd_rub_rate()
     log.info(f"USD/RUB: {rate:.2f}")
 
-    # Run HTTP-based crawlers concurrently, browser-based sequentially
-    http_results = await asyncio.gather(
-        crawl_findchips(rate),
-        crawl_szlcsc(rate),
-        crawl_jlcpcb(rate),
-        crawl_lcsc(rate),
-        crawl_memorymarket(rate),
-        return_exceptions=True,
-    )
+    pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=5)
+    total_written = 0
 
-    all_entries = []
-    for name, result in zip(['findchips', 'szlcsc', 'jlcpcb', 'lcsc', 'memorymarket'], http_results):
-        if isinstance(result, Exception):
-            log.error(f"{name}: FAILED — {result}")
-        else:
-            log.info(f"{name}: {len(result)} entries")
-            all_entries.extend(result)
+    try:
+        # ── Iterative crawl: each source writes to DB as soon as it finishes ──
 
-    # Browser-based (sequential to save memory)
-    for crawler_fn, name in [(crawl_chipdip, 'chipdip'), (crawl_ebay, 'ebay')]:
+        # 1. Fast sources first (they update the app quickly)
+        crawlers = [
+            ('jlcpcb',       crawl_jlcpcb),
+            ('szlcsc',       crawl_szlcsc),
+            ('memorymarket', crawl_memorymarket),
+            ('lcsc',         crawl_lcsc),
+            ('findchips',    crawl_findchips),
+        ]
+
+        for source_name, crawler_fn in crawlers:
+            try:
+                result = await crawler_fn(rate)
+                if result:
+                    unique = await _dedup(result)
+                    log.info(f"{source_name}: {len(result)} raw → {len(unique)} unique")
+                    n = await write_source_to_db(source_name, unique, pool)
+                    total_written += n
+                else:
+                    log.warning(f"{source_name}: 0 entries")
+            except Exception as e:
+                log.error(f"{source_name}: FAILED — {e}")
+
+        # 2. Browser-based (sequential)
+        for crawler_fn, name in [(crawl_chipdip, 'chipdip')]:  # eBay removed — unreliable data
+            try:
+                result = await crawler_fn(rate)
+                if result:
+                    unique = await _dedup(result)
+                    log.info(f"{name}: {len(result)} raw → {len(unique)} unique")
+                    n = await write_source_to_db(name, unique, pool)
+                    total_written += n
+            except Exception as e:
+                log.error(f"{name}: FAILED — {e}")
+
+        # Cleanup: delete history rows older than 90 days
         try:
-            result = await crawler_fn(rate)
-            log.info(f"{name}: {len(result)} entries")
-            all_entries.extend(result)
+            async with pool.acquire() as conn:
+                deleted = await conn.execute(
+                    "DELETE FROM history WHERE fetched_at < NOW() - INTERVAL '90 days'"
+                )
+                log.info(f"History cleanup: {deleted}")
         except Exception as e:
-            log.error(f"{name}: FAILED — {e}")
+            log.warning(f"History cleanup failed: {e}")
 
-    # Deduplicate by (part_number, source, distributor)
-    seen = set()
-    unique = []
-    for e in all_entries:
-        key = (e['part_number'], e['source'], e.get('distributor', ''))
-        if key not in seen:
-            seen.add(key)
-            unique.append(e)
-
-    log.info(f"Total: {len(all_entries)} raw → {len(unique)} unique entries")
-
-    if unique:
-        await write_to_db(unique)
+    finally:
+        await pool.close()
+    try:
+        async with pool.acquire() as conn:
+            deleted = await conn.execute(
+                "DELETE FROM history WHERE fetched_at < NOW() - INTERVAL '90 days'"
+            )
+            log.info(f"History cleanup: {deleted}")
+    except Exception as e:
+        log.warning(f"History cleanup failed: {e}")
 
     elapsed = time.time() - t0
-    log.info(f"=== DONE in {elapsed:.0f}s ===")
+    log.info(f"=== DONE in {elapsed:.0f}s — {total_written} total entries written ===")
 
 if __name__ == "__main__":
     asyncio.run(main())
