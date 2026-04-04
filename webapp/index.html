@@ -852,9 +852,9 @@ async function loadMarket(){
     const apiBase=API_URL||(location.origin+'/api/');
     mktData=await fetchJ(apiBase+'market');
     window.__marketLoaded=true;
-    // Find latest price_date across all market items
+    // Find latest fetched_at across all market items (actual crawl time, not price_date which is date-only)
     let maxD=null;
-    for(const items of Object.values(mktData)){items.forEach(i=>{if(i.price_date&&(!maxD||i.price_date>maxD))maxD=i.price_date;});}
+    for(const items of Object.values(mktData)){items.forEach(i=>{if(i.fetched_at&&(!maxD||i.fetched_at>maxD))maxD=i.fetched_at;});}
     window.__marketUpdated=maxD;
     document.getElementById('updBadge').textContent=fmtTime(maxD);
     renderMarket();

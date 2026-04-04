@@ -535,7 +535,7 @@ async def chart_by_source():
 async def get_market():
     query = """
         SELECT m.source, m.item, m.category, m.daily_high, m.daily_low,
-               m.session_avg, m.session_change, m.price_date,
+               m.session_avg, m.session_change, m.price_date, m.fetched_at,
                m.percent_week, m.percent_month
         FROM market_prices m
         INNER JOIN (
@@ -565,6 +565,7 @@ async def get_market():
                 "session_avg": r["session_avg"],
                 "session_change": r["session_change"],
                 "price_date": r["price_date"].isoformat() if r["price_date"] else None,
+                "fetched_at": r["fetched_at"].isoformat() if r["fetched_at"] else None,
                 "percent_week": float(r["percent_week"]) if r["percent_week"] is not None else None,
                 "percent_month": float(r["percent_month"]) if r["percent_month"] is not None else None,
             }
