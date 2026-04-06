@@ -213,8 +213,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,s
   <div class="mkt-filters">
     <input class="f-input" id="mktSearch" placeholder="Поиск (DDR4, Flash, MicroSD...)" oninput="mktSearch=this.value;renderMktCards()">
     <div class="f-row">
-      <input class="f-input" id="mktCap" list="mktCapDL" placeholder="Все объёмы" oninput="renderMktCards()">
-      <datalist id="mktCapDL"></datalist>
+      <select class="f-sel" id="mktCap" onchange="renderMktCards()"><option value="">Все объёмы</option></select>
     </div>
     <div class="mkt-cats" id="mktCats"></div>
     <div style="font-size:10px;color:var(--text3);padding:0 4px">Биржевые бенчмарки — эталонные цены на типовые конфигурации чипов. Источники: DRAMeXchange, TrendForce.</div>
@@ -421,14 +420,14 @@ function expandChart(type){
     if(chartCapPrice)chartCapPrice.destroy();
     document.getElementById('chartCapPrice').parentElement.style.height=Math.max(150,data.length*32+60)+'px';
     const colors=data.map((_,i)=>{const t=i/Math.max(data.length-1,1);return'rgba('+Math.round(16+43*t)+','+Math.round(185-55*t)+','+Math.round(129+117*t)+',0.75)';});
-    chartCapPrice=new Chart(document.getElementById('chartCapPrice'),{type:'bar',data:{labels:data.map(e=>e.capacity),datasets:[{data:data.map(e=>e.avg_price),backgroundColor:colors,borderColor:colors.map(c=>c.replace('0.75','0.5')),borderWidth:1,borderRadius:6,barThickness:22}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.raw.toFixed(2)+' ('+data[c.dataIndex].count+' поз.)'}}},scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{callback:v=>'$'+v,font:{size:11},color:'#10b981'}},y:{grid:{display:false},ticks:{font:{size:12}}}}}});
+    chartCapPrice=new Chart(document.getElementById('chartCapPrice'),{type:'bar',data:{labels:data.map(e=>e.capacity),datasets:[{data:data.map(e=>e.avg_price),backgroundColor:colors,borderColor:colors.map(c=>c.replace('0.75','0.5')),borderWidth:1,borderRadius:6,barThickness:22}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(els.length>0){const cap=data[els[0].index]?.capacity;if(cap)openCapDetail(cap,'price');}},onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default';},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.raw.toFixed(2)+' ('+data[c.dataIndex].count+' поз.)'}}},scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{callback:v=>'$'+v,font:{size:11},color:'#10b981'}},y:{grid:{display:false},ticks:{font:{size:12}}}}}});
   }else if(type==='stock'){
     const data=exp.stock?window.__fullStockData:window.__fullStockData.slice(0,5);
     btn.textContent=exp.stock?'Свернуть':'Показать все ('+window.__fullStockData.length+')';
     if(chartCapStock)chartCapStock.destroy();
     document.getElementById('chartCapStock').parentElement.style.height=Math.max(150,data.length*32+60)+'px';
     const colors=data.map((_,i)=>{const t=i/Math.max(data.length-1,1);return'rgba('+Math.round(59-53*t)+','+Math.round(130+52*t)+','+Math.round(246-34*t)+',0.7)';});
-    chartCapStock=new Chart(document.getElementById('chartCapStock'),{type:'bar',data:{labels:data.map(e=>e.capacity),datasets:[{data:data.map(e=>e.total_stock),backgroundColor:colors,borderColor:colors.map(c=>c.replace('0.7','0.5')),borderWidth:1,borderRadius:6,barThickness:22}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const d=data[c.dataIndex];return d.total_stock.toLocaleString()+' шт ('+d.positions+' поз.)'}}}},scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{callback:v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3|0)+'K':v,font:{size:11}}},y:{grid:{display:false},ticks:{font:{size:12}}}}}});
+    chartCapStock=new Chart(document.getElementById('chartCapStock'),{type:'bar',data:{labels:data.map(e=>e.capacity),datasets:[{data:data.map(e=>e.total_stock),backgroundColor:colors,borderColor:colors.map(c=>c.replace('0.7','0.5')),borderWidth:1,borderRadius:6,barThickness:22}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(els.length>0){const cap=data[els[0].index]?.capacity;if(cap)openCapDetail(cap,'stock');}},onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default';},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const d=data[c.dataIndex];return d.total_stock.toLocaleString()+' шт ('+d.positions+' поз.)'}}}},scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{callback:v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3|0)+'K':v,font:{size:11}}},y:{grid:{display:false},ticks:{font:{size:12}}}}}});
   }else if(type==='deals'){
     const data=exp.deals?window.__fullDealsData:window.__fullDealsData.slice(0,5);
     window.__dealsData=data;
@@ -703,6 +702,8 @@ async function renderChart(chartMeta){
       datasets:[{data:priceEntries.map(e=>e.avg_price),backgroundColor:priceEntries.map((_,i)=>{const t=i/(Math.max(priceEntries.length-1,1));const r=Math.round(16+(59-16)*t);const g=Math.round(185+(130-185)*t);const b=Math.round(129+(246-129)*t);return'rgba('+r+','+g+','+b+',0.75)';}),borderColor:priceEntries.map((_,i)=>{const t=i/(Math.max(priceEntries.length-1,1));const r=Math.round(16+(59-16)*t);const g=Math.round(185+(130-185)*t);const b=Math.round(129+(246-129)*t);return'rgba('+r+','+g+','+b+',0.5)';}),borderWidth:1,borderRadius:6,barThickness:22}]
     },options:{
       indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      onClick:(e,els)=>{if(els.length>0){const cap=priceEntries[els[0].index]?.capacity;if(cap)openCapDetail(cap,'price');}},
+      onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default';},
       plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.raw.toFixed(2)+' ('+priceEntries[c.dataIndex].count+' позиций)'}}},
       scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{callback:v=>'$'+v,font:{size:11},color:'#10b981'}},y:{grid:{display:false},ticks:{font:{size:12}}}}
     }});
@@ -729,6 +730,8 @@ async function renderChart(chartMeta){
       datasets:[{data:stockEntries.map(e=>e.total_stock),backgroundColor:stockEntries.map((_,i)=>{const t=i/(Math.max(stockEntries.length-1,1));const r=Math.round(59+(6-59)*t);const g=Math.round(130+(182-130)*t);const b=Math.round(246+(212-246)*t);return'rgba('+r+','+g+','+b+',0.7)';}),borderColor:stockEntries.map((_,i)=>{const t=i/(Math.max(stockEntries.length-1,1));const r=Math.round(59+(6-59)*t);const g=Math.round(130+(182-130)*t);const b=Math.round(246+(212-246)*t);return'rgba('+r+','+g+','+b+',0.5)';}),borderWidth:1,borderRadius:6,barThickness:22}]
     },options:{
       indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      onClick:(e,els)=>{if(els.length>0){const cap=stockEntries[els[0].index]?.capacity;if(cap)openCapDetail(cap,'stock');}},
+      onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default';},
       plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const d=stockEntries[c.dataIndex];return d.total_stock.toLocaleString()+' шт ('+d.positions+' позиций)'}}}},
       scales:{x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{callback:v=>v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?(v/1000|0)+'K':v,font:{size:11}}},y:{grid:{display:false},ticks:{font:{size:12}}}}
     }});
@@ -1006,7 +1009,7 @@ function renderMarket(){
     if(v.endsWith('MB'))return v+' (модуль)';
     return v;
   };
-  document.getElementById('mktCapDL').innerHTML=vols.map(v=>'<option value="'+v+'">'+volLabel(v)+'</option>').join('');
+  document.getElementById('mktCap').innerHTML='<option value="">Все объёмы</option>'+vols.map(v=>'<option value="'+v+'">'+volLabel(v)+'</option>').join('');
   renderMktCards();
 }
 
@@ -1134,6 +1137,73 @@ async function openMktHistory(item){
 function closeModal(){
   document.getElementById('overlay').classList.remove('show');
   if(tg?.BackButton)tg.BackButton.hide();
+}
+
+async function openCapDetail(capacity, mode){
+  document.getElementById('mTitle').textContent=capacity;
+  document.getElementById('mSub').textContent=mode==='price'?'Средние цены по типам':'Стоки по типам';
+  document.getElementById('mSources').innerHTML='<div style="text-align:center;padding:12px;color:var(--text3)">Загрузка...</div>';
+  document.getElementById('overlay').classList.add('show');
+  if(tg?.BackButton){tg.BackButton.show();tg.BackButton.onClick(closeModal)}
+  const apiBase=API_URL||(location.origin+'/api/');
+  try{
+    const data=await fetchJ(apiBase+'prices?capacity='+encodeURIComponent(capacity)+'&limit=1000&_t='+Date.now());
+    const items=normalizePrices(data);
+    // Group by chip_type
+    const byType={};
+    items.forEach(p=>{
+      const t=p.type||'Другое';
+      if(!byType[t])byType[t]={prices:[],stock:0,count:0};
+      byType[t].count++;
+      if(p.price_usd>0)byType[t].prices.push(p.price_usd);
+      byType[t].stock+=(p.stock||0);
+    });
+    // Sort by count desc
+    const sorted=Object.entries(byType).sort((a,b)=>b[1].count-a[1].count);
+    // Build source rows
+    let html='<div class="modal-label">Разбивка по типам ('+items.length+' позиций)</div>';
+    sorted.forEach(([type,d])=>{
+      const avgPrice=d.prices.length>0?(d.prices.reduce((a,b)=>a+b,0)/d.prices.length):0;
+      const priceStr=avgPrice>0?'$'+avgPrice.toFixed(2):'—';
+      const stockStr=d.stock>0?d.stock.toLocaleString()+' шт':'—';
+      html+='<div class="src-row">'+
+        '<span class="src-name">'+esc(type)+' <span style="color:var(--text3);font-size:10px">('+d.count+')</span></span>'+
+        '<span class="src-stock">'+stockStr+'</span>'+
+        '<span class="src-price">'+priceStr+'</span>'+
+        '</div>';
+    });
+    document.getElementById('mSources').innerHTML=html;
+    // Chart: horizontal bar by type
+    if(detailChart){detailChart.destroy();detailChart=null;}
+    const chartData=sorted.slice(0,8);
+    const values=mode==='price'
+      ?chartData.map(([_,d])=>d.prices.length>0?+(d.prices.reduce((a,b)=>a+b,0)/d.prices.length).toFixed(2):0)
+      :chartData.map(([_,d])=>d.stock);
+    const labels=chartData.map(([t])=>t);
+    detailChart=new Chart(document.getElementById('mChart'),{
+      type:'bar',
+      data:{labels,datasets:[{
+        data:values,
+        backgroundColor:'rgba(16,185,129,0.6)',
+        borderColor:'rgba(52,211,153,0.8)',
+        borderWidth:1,borderRadius:6,barThickness:20
+      }]},
+      options:{
+        indexAxis:'y',responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{
+          label:c=>mode==='price'?'$'+c.raw.toFixed(2):c.raw.toLocaleString()+' шт'
+        }}},
+        scales:{
+          x:{grid:{color:'rgba(16,185,129,0.06)'},ticks:{color:'#10b981',callback:v=>mode==='price'?'$'+v:v>=1000?(v/1000|0)+'K':v}},
+          y:{grid:{display:false},ticks:{color:'#a1a1aa',font:{size:11}}}
+        }
+      }
+    });
+    // Hide history section — not relevant for capacity detail
+    document.getElementById('histWrap').style.display='none';
+  }catch(e){
+    document.getElementById('mSources').innerHTML='<div style="text-align:center;padding:12px;color:#ef4444">Ошибка: '+esc(e.message)+'</div>';
+  }
 }
 
 function fmtTime(iso){
